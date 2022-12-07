@@ -120,7 +120,13 @@ function importBlocks(
 
     if (match) {
       textNode.setTextContent(lineText.slice(match[0].length));
-      replace(elementNode, [textNode], match, true);
+      replace(elementNode, [textNode], match, true, (childTextNode) =>
+        importTextFormatTransformers(
+          childTextNode,
+          textFormatTransformersIndex,
+          textMatchTransformers,
+        ),
+      );
       break;
     }
   }

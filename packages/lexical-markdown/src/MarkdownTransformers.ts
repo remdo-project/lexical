@@ -56,6 +56,7 @@ export type ElementTransformer = {
     children: Array<LexicalNode>,
     match: Array<string>,
     isImport: boolean,
+    importInlines: (node: TextNode) => void,
   ) => void;
   type: 'element';
 };

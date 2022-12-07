@@ -11,7 +11,7 @@ import type {
   TextMatchTransformer,
   Transformer,
 } from '@lexical/markdown';
-import type {ElementNode, LexicalNode} from 'lexical';
+import type {ElementNode, LexicalNode, TextNode} from 'lexical';
 
 import {
   CHECK_LIST,
@@ -168,8 +168,8 @@ export const TABLE: ElementTransformer = {
     return output.join('\n');
   },
   regExp: TABLE_ROW_REG_EXP,
-  replace: (parentNode, _1, match) => {
-    const matchCells = mapToTableCells(match[0]);
+  replace: (parentNode, _1, match, _isImport, importInlines) => {
+    const matchCells = mapToTableCells(match[0], importInlines);
 
     if (matchCells == null) {
       return;
@@ -194,7 +194,7 @@ export const TABLE: ElementTransformer = {
         break;
       }
 
-      const cells = mapToTableCells(firstChild.getTextContent());
+      const cells = mapToTableCells(firstChild.getTextContent(), importInlines);
 
       if (cells == null) {
         break;
@@ -214,7 +214,9 @@ export const TABLE: ElementTransformer = {
       table.append(tableRow);
 
       for (let i = 0; i < maxCells; i++) {
-        tableRow.append(i < cells.length ? cells[i] : createTableCell(null));
+        tableRow.append(
+          i < cells.length ? cells[i] : createTableCell(null, importInlines),
+        );
       }
     }
 
@@ -241,19 +243,25 @@ function getTableColumnsSize(table: TableNode) {
 
 const createTableCell = (
   textContent: string | null | undefined,
+  importInlines: (node: TextNode) => void,
 ): TableCellNode => {
   const cell = $createTableCellNode(TableCellHeaderStates.NO_STATUS);
   const paragraph = $createParagraphNode();
 
   if (textContent != null) {
-    paragraph.append($createTextNode(textContent.trim()));
+    const textNode = $createTextNode(textContent.trim());
+    paragraph.append(textNode);
+    importInlines(textNode);
   }
 
   cell.append(paragraph);
   return cell;
 };
 
-const mapToTableCells = (textContent: string): Array<TableCellNode> | null => {
+const mapToTableCells = (
+  textContent: string,
+  importInlines: (node: TextNode) => void,
+): Array<TableCellNode> | null => {
   // TODO:
   // For now plain text, single node. Can be expanded to more complex content
   // including formatted text
@@ -263,7 +271,9 @@ const mapToTableCells = (textContent: string): Array<TableCellNode> | null => {
     return null;
   }
 
-  return match[1].split('|').map((text) => createTableCell(text));
+  return match[1]
+    .split('|')
+    .map((text) => createTableCell(text, importInlines));
 };
 
 export const PLAYGROUND_TRANSFORMERS: Array<Transformer> = [
