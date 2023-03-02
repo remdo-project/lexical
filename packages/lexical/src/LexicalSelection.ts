@@ -38,6 +38,7 @@ import {DOM_ELEMENT_TYPE, TEXT_TYPE_TO_FORMAT} from './LexicalConstants';
 import {
   markCollapsedSelectionFormat,
   markSelectionChangeFromDOMUpdate,
+  setSelectionFlushedFromDOMUpdate,
 } from './LexicalEvents';
 import {getIsProcesssingMutations} from './LexicalMutations';
 import {$normalizeSelection} from './LexicalNormalization';
@@ -2556,6 +2557,7 @@ export function internalCreateRangeSelection(
   // reconciliation unless there are dirty nodes that need
   // reconciling.
 
+  // here
   const windowEvent = windowObj.event;
   const eventType = windowEvent ? windowEvent.type : undefined;
   const isSelectionChange = eventType === 'selectionchange';
@@ -2949,14 +2951,16 @@ export function updateDOMSelection(
     // complex, as now, we've sync update the DOM, but selection no longer
     // matches.
     if (IS_CHROME && nodeCount > 1000) {
-      window.requestAnimationFrame(() =>
+      setSelectionFlushedFromDOMUpdate(false);
+      window.requestAnimationFrame(() => {
+        setSelectionFlushedFromDOMUpdate(true);
         domSelection.setBaseAndExtent(
           nextAnchorNode as Node,
           nextAnchorOffset,
           nextFocusNode as Node,
           nextFocusOffset,
-        ),
-      );
+        );
+      });
     } else {
       domSelection.setBaseAndExtent(
         nextAnchorNode,

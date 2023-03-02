@@ -164,6 +164,7 @@ let unprocessedBeforeInputData: null | string = null;
 let rootElementsRegistered = 0;
 let isSelectionChangeFromDOMUpdate = false;
 let isSelectionChangeFromMouseDown = false;
+let isSelectionFlushedFromDOMUpdate = true;
 let isInsertLineBreak = false;
 let isFirefoxEndingComposition = false;
 let collapsedSelectionFormat: [number, string, number, NodeKey, number] = [
@@ -198,6 +199,7 @@ function $shouldPreventDefaultAndInsertText(
   const textLength = text.length;
 
   return (
+    !isSelectionFlushedFromDOMUpdate ||
     anchorKey !== focus.key ||
     // If we're working with a non-text node.
     !$isTextNode(anchorNode) ||
@@ -265,6 +267,7 @@ function onSelectionChange(
   } = domSelection;
   if (isSelectionChangeFromDOMUpdate) {
     isSelectionChangeFromDOMUpdate = false;
+    isSelectionFlushedFromDOMUpdate = true;
 
     // If native DOM selection is on a DOM element, then
     // we should continue as usual, as Lexical's selection
@@ -1243,6 +1246,10 @@ function cleanActiveNestedEditorsMap(editor: LexicalEditor) {
 
 export function markSelectionChangeFromDOMUpdate(): void {
   isSelectionChangeFromDOMUpdate = true;
+}
+
+export function setSelectionFlushedFromDOMUpdate(isFlushed: boolean): void {
+  isSelectionFlushedFromDOMUpdate = isFlushed;
 }
 
 export function markCollapsedSelectionFormat(
