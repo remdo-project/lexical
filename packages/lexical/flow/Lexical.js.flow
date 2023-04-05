@@ -849,7 +849,7 @@ declare export function $getNearestRootOrShadowRoot(
   node: LexicalNode,
 ): RootNode | ElementNode;
 declare export function $isRootOrShadowRoot(
-  node: LexicalNode,
+  node: ?LexicalNode,
 ): boolean %checks(node instanceof RootNode || node instanceof ElementNode);
 declare export function $hasAncestor(
   child: LexicalNode,
