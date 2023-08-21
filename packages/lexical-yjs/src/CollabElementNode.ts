@@ -17,7 +17,7 @@ import {
   $isTextNode,
 } from 'lexical';
 import invariant from 'shared/invariant';
-import {YMap} from 'yjs/dist/src/internals';
+import {YMap, YXmlText} from 'yjs/dist/src/internals';
 
 import {CollabDecoratorNode} from './CollabDecoratorNode';
 import {CollabLineBreakNode} from './CollabLineBreakNode';
@@ -34,6 +34,7 @@ import {
   syncPropertiesFromLexical,
   syncPropertiesFromYjs,
 } from './Utils';
+import { instanceOf } from 'prop-types';
 
 type IntentionallyMarkedAsDirtyElement = boolean;
 
@@ -131,10 +132,24 @@ export class CollabElementNode {
     const children = this._children;
     let currIndex = 0;
 
+    let prevIsFolded = false; //remdo customization
     for (let i = 0; i < deltas.length; i++) {
       const delta = deltas[i];
       const insertDelta = delta.insert;
       const deleteDelta = delta.delete;
+
+      //remdo customization
+      try {
+        if (prevIsFolded) {
+          currIndex += 1;
+          continue;
+        }
+      }
+      finally {
+        const delta = insertDelta as XmlText;
+        prevIsFolded = delta != null && delta.getAttribute && delta.getAttribute("__folded");
+      }
+      //end of remdo customization
 
       if (delta.retain != null) {
         currIndex += delta.retain;

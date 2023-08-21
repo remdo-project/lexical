@@ -32,6 +32,7 @@ import {
 } from 'lexical';
 import * as React from 'react';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import { $isListItemNode } from '@lexical/list';
 
 const NON_SINGLE_WIDTH_CHARS_REPLACEMENT: Readonly<Record<string, string>> =
   Object.freeze({
@@ -502,7 +503,10 @@ function printNode(node: LexicalNode) {
       .filter(Boolean)
       .join(' ')
       .trim();
-  } else {
+  } else if ($isListItemNode(node)) {
+    return node.__folded ? 'folded' : '.';
+  }
+  else {
     return '';
   }
 }
