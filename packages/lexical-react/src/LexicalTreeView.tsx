@@ -34,6 +34,7 @@ import {
 } from 'lexical';
 import * as React from 'react';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
+import { $isListItemNode } from '@lexical/list';
 
 const NON_SINGLE_WIDTH_CHARS_REPLACEMENT: Readonly<Record<string, string>> =
   Object.freeze({
@@ -498,6 +499,12 @@ function normalize(text: string) {
 
 // TODO Pass via props to allow customizability
 function printNode(node: LexicalNode) {
+  //RemDo custom print for list items
+  //@ts-ignore
+  if ($isListItemNode(node) && node.getFolded()) {
+      return "folded"
+  }
+  //end of RemDo
   if ($isTextNode(node)) {
     const text = node.getTextContent();
     const title = text.length === 0 ? '(empty)' : `"${normalize(text)}"`;
