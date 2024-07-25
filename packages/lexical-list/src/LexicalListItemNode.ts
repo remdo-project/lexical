@@ -76,7 +76,8 @@ export class ListItemNode extends ElementNode {
     this.__value = value === undefined ? 1 : value;
     this.__checked = checked;
     this.__id =
-      id ?? globalThis.remdoGenerateNoteID ?? globalThis.remdoGenerateNoteID();
+      id ??
+      (globalThis.remdoGenerateNoteID && globalThis.remdoGenerateNoteID());
   }
 
   createDOM(config: EditorConfig): HTMLElement {
