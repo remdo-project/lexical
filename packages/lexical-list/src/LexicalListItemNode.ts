@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-
 import type {ListNode} from './';
 import type {
   BaseSelection,
@@ -56,19 +55,28 @@ export class ListItemNode extends ElementNode {
   __value: number;
   /** @internal */
   __checked?: boolean;
+  /** @internal */
+  __id: string;
 
   static getType(): string {
     return 'listitem';
   }
 
   static clone(node: ListItemNode): ListItemNode {
-    return new ListItemNode(node.__value, node.__checked, node.__key);
+    return new ListItemNode(
+      node.__value,
+      node.__checked,
+      node.__key,
+      node.__id,
+    );
   }
 
-  constructor(value?: number, checked?: boolean, key?: NodeKey) {
+  constructor(value?: number, checked?: boolean, key?: NodeKey, id?: string) {
     super(key);
     this.__value = value === undefined ? 1 : value;
     this.__checked = checked;
+    this.__id =
+      id ?? globalThis.remdoGenerateNoteID ?? globalThis.remdoGenerateNoteID();
   }
 
   createDOM(config: EditorConfig): HTMLElement {
