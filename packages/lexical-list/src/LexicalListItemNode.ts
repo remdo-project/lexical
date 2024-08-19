@@ -110,15 +110,18 @@ export class ListItemNode extends ElementNode {
   static transform(): (node: LexicalNode) => void {
     return (node: LexicalNode) => {
       invariant($isListItemNode(node), 'node is not a ListItemNode');
-      if (node.__checked == null) {
-        return;
-      }
-      const parent = node.getParent();
-      if ($isListNode(parent)) {
-        if (parent.getListType() !== 'check' && node.getChecked() != null) {
-          node.setChecked(undefined);
-        }
-      }
+      //
+      //remdo customisation
+      //
+      //if (node.__checked == null) {
+      //  return;
+      //}
+      //const parent = node.getParent();
+      //if ($isListNode(parent)) {
+      //  if (parent.getListType() !== 'check' && node.getChecked() != null) {
+      //    node.setChecked(undefined);
+      //  }
+      //}
     };
   }
 
@@ -435,24 +438,29 @@ function $setListItemThemeClassNames(
   }
 
   if (listTheme) {
-    const parentNode = node.getParent();
-    const isCheckList =
-      $isListNode(parentNode) && parentNode.getListType() === 'check';
+    //
+    //remdo customisation
+    //
+    //const parentNode = node.getParent();
+    //const isCheckList =
+    //  $isListNode(parentNode) && parentNode.getListType() === 'check';
     const checked = node.getChecked();
 
-    if (!isCheckList || checked) {
+    //if (!isCheckList || checked) {
+    if (checked) {
       classesToRemove.push(listTheme.listitemUnchecked);
     }
 
-    if (!isCheckList || !checked) {
+    //if (!isCheckList || !checked) {
+    if (!checked) {
       classesToRemove.push(listTheme.listitemChecked);
     }
 
-    if (isCheckList) {
-      classesToAdd.push(
-        checked ? listTheme.listitemChecked : listTheme.listitemUnchecked,
-      );
-    }
+    //if (isCheckList) {
+    classesToAdd.push(
+      checked ? listTheme.listitemChecked : listTheme.listitemUnchecked,
+    );
+    //}
   }
 
   if (nestedListItemClassName !== undefined) {
