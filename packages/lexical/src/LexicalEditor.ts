@@ -5,22 +5,18 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-
+import {$getRoot, $getSelection, TextNode} from '.';
+import {FULL_RECONCILE, NO_DIRTY_NODES} from './LexicalConstants';
 import type {EditorState, SerializedEditorState} from './LexicalEditorState';
+import {createEmptyEditorState} from './LexicalEditorState';
+import {addRootElementEvents, removeRootElementEvents} from './LexicalEvents';
+import {$flushRootMutations, initMutationObserver} from './LexicalMutations';
 import type {
   DOMConversion,
   DOMConversionMap,
   DOMExportOutput,
   NodeKey,
 } from './LexicalNode';
-
-import invariant from 'shared/invariant';
-
-import {$getRoot, $getSelection, TextNode} from '.';
-import {FULL_RECONCILE, NO_DIRTY_NODES} from './LexicalConstants';
-import {createEmptyEditorState} from './LexicalEditorState';
-import {addRootElementEvents, removeRootElementEvents} from './LexicalEvents';
-import {$flushRootMutations, initMutationObserver} from './LexicalMutations';
 import {LexicalNode} from './LexicalNode';
 import {
   $commitPendingUpdates,
@@ -37,12 +33,14 @@ import {
   getDOMSelection,
   markAllNodesAsDirty,
 } from './LexicalUtils';
+import {RemdoState} from './RemdoState';
 import {ArtificialNode__DO_NOT_USE} from './nodes/ArtificialNode';
 import {DecoratorNode} from './nodes/LexicalDecoratorNode';
 import {LineBreakNode} from './nodes/LexicalLineBreakNode';
 import {ParagraphNode} from './nodes/LexicalParagraphNode';
 import {RootNode} from './nodes/LexicalRootNode';
 import {TabNode} from './nodes/LexicalTabNode';
+import invariant from 'shared/invariant';
 
 export type Spread<T1, T2> = Omit<T2, keyof T1> & T1;
 
@@ -549,6 +547,8 @@ export function createEditor(editorConfig?: CreateEditorArgs): LexicalEditor {
 export class LexicalEditor {
   ['constructor']!: KlassConstructor<typeof LexicalEditor>;
 
+  //remdo customizations
+  _remdoState: RemdoState;
   /** @internal */
   _headless: boolean;
   /** @internal */
@@ -618,6 +618,8 @@ export class LexicalEditor {
     htmlConversions: DOMConversionCache,
     editable: boolean,
   ) {
+    //remdo customizations
+    this._remdoState = new RemdoState();
     this._parentEditor = parentEditor;
     // The root element associated with this editor
     this._rootElement = null;

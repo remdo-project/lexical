@@ -6,6 +6,13 @@
  *
  */
 import type {ListNode} from './';
+import {$createListNode, $isListNode} from './';
+import {$handleIndent, $handleOutdent, mergeLists} from './formatList';
+import {isNestedListNode} from './utils';
+import {
+  addClassNamesToElement,
+  removeClassNamesFromElement,
+} from '@lexical/utils';
 import type {
   BaseSelection,
   DOMConversionMap,
@@ -20,11 +27,6 @@ import type {
   SerializedElementNode,
   Spread,
 } from 'lexical';
-
-import {
-  addClassNamesToElement,
-  removeClassNamesFromElement,
-} from '@lexical/utils';
 import {
   $applyNodeReplacement,
   $createParagraphNode,
@@ -36,10 +38,6 @@ import {
 } from 'lexical';
 import invariant from 'shared/invariant';
 import normalizeClassNames from 'shared/normalizeClassNames';
-
-import {$createListNode, $isListNode} from './';
-import {$handleIndent, $handleOutdent, mergeLists} from './formatList';
-import {isNestedListNode} from './utils';
 
 export type SerializedListItemNode = Spread<
   {
@@ -80,12 +78,38 @@ export class ListItemNode extends ElementNode {
       (globalThis.remdoGenerateNoteID && globalThis.remdoGenerateNoteID());
   }
 
-  createDOM(config: EditorConfig): HTMLElement {
+  //remdo customisation
+  getNonNestedTextContent(): string {
+    return this.getChildren()
+      .map((child) => {
+        if ($isListNode(child)) {
+          return '';
+        }
+        return child.getTextContent();
+      })
+      .join('');
+  }
+
+  //remdo customisation
+  //createDOM(config: EditorConfig): HTMLElement {
+  createDOM(config: EditorConfig, editor: LexicalEditor): HTMLElement {
     const element = document.createElement('li');
     const parent = this.getParent();
     if ($isListNode(parent) && parent.getListType() === 'check') {
       updateListItemChecked(element, this, null, parent);
     }
+
+    //remdo customisation
+    // eslint-disable-next-line lexical/no-optional-chaining
+    const filter = editor?._remdoState?.getFilter();
+    if (filter) {
+      if (!this.getNonNestedTextContent().includes(filter)) {
+        addClassNamesToElement(element, 'filtered');
+      } else {
+        addClassNamesToElement(element, 'unfiltered');
+      }
+    }
+
     element.value = this.__value;
     $setListItemThemeClassNames(element, config.theme, this);
     return element;

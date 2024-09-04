@@ -5,7 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-
+import {$createListItemNode, $isListItemNode, ListItemNode} from '.';
+import {
+  mergeNextSiblingListIfSameType,
+  updateChildrenListItemValue,
+} from './formatList';
+import {$getListDepth, $wrapInListItem} from './utils';
 import {
   addClassNamesToElement,
   isHTMLElement,
@@ -15,6 +20,7 @@ import {
   $applyNodeReplacement,
   $createTextNode,
   $isElementNode,
+  $isRootOrShadowRoot,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -29,13 +35,6 @@ import {
 } from 'lexical';
 import invariant from 'shared/invariant';
 import normalizeClassNames from 'shared/normalizeClassNames';
-
-import {$createListItemNode, $isListItemNode, ListItemNode} from '.';
-import {
-  mergeNextSiblingListIfSameType,
-  updateChildrenListItemValue,
-} from './formatList';
-import {$getListDepth, $wrapInListItem} from './utils';
 
 export type SerializedListNode = Spread<
   {
@@ -100,6 +99,13 @@ export class ListNode extends ElementNode {
   createDOM(config: EditorConfig, _editor?: LexicalEditor): HTMLElement {
     const tag = this.__tag;
     const dom = document.createElement(tag);
+    // eslint-disable-next-line lexical/no-optional-chaining
+    if (
+      _editor?._remdoState.getFilter() &&
+      !$isRootOrShadowRoot(this.getParent())
+    ) {
+      addClassNamesToElement(dom, 'list-unstyled');
+    }
 
     if (this.__start !== 1) {
       dom.setAttribute('start', String(this.__start));
