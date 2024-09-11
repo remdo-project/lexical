@@ -6,13 +6,6 @@
  *
  */
 import type {ListNode} from './';
-import {$createListNode, $isListNode} from './';
-import {$handleIndent, $handleOutdent, mergeLists} from './formatList';
-import {isNestedListNode} from './utils';
-import {
-  addClassNamesToElement,
-  removeClassNamesFromElement,
-} from '@lexical/utils';
 import type {
   BaseSelection,
   DOMConversionMap,
@@ -27,6 +20,11 @@ import type {
   SerializedElementNode,
   Spread,
 } from 'lexical';
+
+import {
+  addClassNamesToElement,
+  removeClassNamesFromElement,
+} from '@lexical/utils';
 import {
   $applyNodeReplacement,
   $createParagraphNode,
@@ -39,8 +37,13 @@ import {
 import invariant from 'shared/invariant';
 import normalizeClassNames from 'shared/normalizeClassNames';
 
+import {$createListNode, $isListNode} from './';
+import {$handleIndent, $handleOutdent, mergeLists} from './formatList';
+import {isNestedListNode} from './utils';
+
 export type SerializedListItemNode = Spread<
   {
+    folded: boolean | undefined; //remdo customisation
     checked: boolean | undefined;
     value: number;
   },
@@ -49,6 +52,9 @@ export type SerializedListItemNode = Spread<
 
 /** @noInheritDoc */
 export class ListItemNode extends ElementNode {
+  //remdo customisation
+  __folded: boolean;
+
   /** @internal */
   __value: number;
   /** @internal */
@@ -66,11 +72,19 @@ export class ListItemNode extends ElementNode {
       node.__checked,
       node.__key,
       node.__id,
+      node.__folded, //remdo customisation
     );
   }
 
-  constructor(value?: number, checked?: boolean, key?: NodeKey, id?: string) {
+  constructor(
+    value?: number,
+    checked?: boolean,
+    key?: NodeKey,
+    id?: string,
+    folded?: boolean,
+  ) {
     super(key);
+    this.__folded = !!folded;
     this.__value = value === undefined ? 1 : value;
     this.__checked = checked;
     this.__id =
@@ -91,6 +105,16 @@ export class ListItemNode extends ElementNode {
   }
 
   //remdo customisation
+  getFolded() {
+    return !!this.getLatest().__folded;
+  }
+
+  //remdo customisation
+  setFolded(value: boolean | undefined): void {
+    this.getWritable().__folded = !!value;
+  }
+
+  //remdo customisation
   //createDOM(config: EditorConfig): HTMLElement {
   createDOM(config: EditorConfig, editor: LexicalEditor): HTMLElement {
     const element = document.createElement('li');
@@ -99,7 +123,7 @@ export class ListItemNode extends ElementNode {
       updateListItemChecked(element, this, null, parent);
     }
 
-    //remdo customisation
+    //remdo customisation search filter
     // eslint-disable-next-line lexical/no-optional-chaining
     const filter = editor?._remdoState?.getFilter();
     if (filter) {
@@ -108,6 +132,11 @@ export class ListItemNode extends ElementNode {
       } else {
         addClassNamesToElement(element, 'unfiltered');
       }
+    }
+
+    //remdo customisation search filter
+    if (this.getFolded()) {
+      addClassNamesToElement(element, 'note-folded');
     }
 
     element.value = this.__value;
@@ -160,6 +189,7 @@ export class ListItemNode extends ElementNode {
 
   static importJSON(serializedNode: SerializedListItemNode): ListItemNode {
     const node = $createListItemNode();
+    node.setFolded(serializedNode.folded); //remdo customisation
     node.setChecked(serializedNode.checked);
     node.setValue(serializedNode.value);
     node.setFormat(serializedNode.format);
@@ -168,7 +198,7 @@ export class ListItemNode extends ElementNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = this.createDOM(editor._config);
+    const element = this.createDOM(editor._config, editor);
     element.style.textAlign = this.getFormatType();
     return {
       element,
@@ -179,6 +209,7 @@ export class ListItemNode extends ElementNode {
     return {
       ...super.exportJSON(),
       checked: this.getChecked(),
+      folded: this.getFolded(), //remdo customisation
       type: 'listitem',
       value: this.getValue(),
       version: 1,
