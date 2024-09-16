@@ -5,12 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-import {$createListItemNode, $isListItemNode, ListItemNode} from '.';
-import {
-  mergeNextSiblingListIfSameType,
-  updateChildrenListItemValue,
-} from './formatList';
-import {$getListDepth, $wrapInListItem} from './utils';
+
+/* eslint-disable lexical/no-optional-chaining */
 import {
   addClassNamesToElement,
   isHTMLElement,
@@ -35,6 +31,13 @@ import {
 } from 'lexical';
 import invariant from 'shared/invariant';
 import normalizeClassNames from 'shared/normalizeClassNames';
+
+import {$createListItemNode, $isListItemNode, ListItemNode} from '.';
+import {
+  mergeNextSiblingListIfSameType,
+  updateChildrenListItemValue,
+} from './formatList';
+import {$getListDepth, $wrapInListItem} from './utils';
 
 export type SerializedListNode = Spread<
   {
@@ -95,16 +98,28 @@ export class ListNode extends ElementNode {
   }
 
   // View
-
   createDOM(config: EditorConfig, _editor?: LexicalEditor): HTMLElement {
     const tag = this.__tag;
     const dom = document.createElement(tag);
-    // eslint-disable-next-line lexical/no-optional-chaining
+    // remdo customization search filter
+    const filter = _editor?._remdoState?.getFilter();
     if (
       _editor?._remdoState.getFilter() &&
       !$isRootOrShadowRoot(this.getParent())
     ) {
       addClassNamesToElement(dom, 'list-unstyled');
+    }
+    //remdo customisation focus
+    const focusNode = _editor?._remdoState?.getFocus();
+    if (focusNode && !filter) {
+      if (
+        focusNode.getParent()?.getKey() === this.getKey() ||
+        focusNode.isParentOf(this)
+      ) {
+        addClassNamesToElement(dom, 'unfiltered');
+      } else {
+        addClassNamesToElement(dom, 'filtered');
+      }
     }
 
     if (this.__start !== 1) {

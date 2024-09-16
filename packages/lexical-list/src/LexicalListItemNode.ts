@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
+
+/* eslint-disable lexical/no-optional-chaining */
 import type {ListNode} from './';
 import type {
   BaseSelection,
@@ -93,6 +95,11 @@ export class ListItemNode extends ElementNode {
   }
 
   //remdo customisation
+  getID(): string {
+    return this.__id;
+  }
+
+  //remdo customisation
   getNonNestedTextContent(): string {
     return this.getChildren()
       .map((child) => {
@@ -124,7 +131,6 @@ export class ListItemNode extends ElementNode {
     }
 
     //remdo customisation search filter
-    // eslint-disable-next-line lexical/no-optional-chaining
     const filter = editor?._remdoState?.getFilter();
     if (filter) {
       if (!this.getNonNestedTextContent().includes(filter)) {
@@ -137,6 +143,20 @@ export class ListItemNode extends ElementNode {
     //remdo customisation search filter
     if (this.getFolded()) {
       addClassNamesToElement(element, 'note-folded');
+    }
+
+    //remdo customisation focus
+    const focusNode = editor?._remdoState?.getFocus();
+    if (focusNode && !filter) {
+      if (
+        focusNode.getParent()?.getKey() === this.getKey() ||
+        focusNode.getKey() === this.getKey() ||
+        focusNode.isParentOf(this)
+      ) {
+        addClassNamesToElement(element, 'unfiltered');
+      } else {
+        addClassNamesToElement(element, 'filtered');
+      }
     }
 
     element.value = this.__value;
