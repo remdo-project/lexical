@@ -99,13 +99,16 @@ test.describe('Identation', () => {
           dir="ltr"
           spellcheck="false"
           data-gutter="1"
-          data-language="javascript"
-          data-highlight-language="javascript">
+          data-highlight-language="javascript"
+          data-language="javascript">
           <span data-lexical-text="true">code</span>
         </code>
         <p class="PlaygroundEditorTheme__paragraph"><br /></p>
         <table
           class="PlaygroundEditorTheme__table PlaygroundEditorTheme__tableSelection">
+          <colgroup>
+            <col style="width: 92px" />
+          </colgroup>
           <tr>
             <th
               class="PlaygroundEditorTheme__tableCell PlaygroundEditorTheme__tableCellHeader"
@@ -177,8 +180,8 @@ test.describe('Identation', () => {
           dir="ltr"
           spellcheck="false"
           data-gutter="1"
-          data-language="javascript"
-          data-highlight-language="javascript">
+          data-highlight-language="javascript"
+          data-language="javascript">
           <span data-lexical-text="true">code</span>
         </code>
         <p
@@ -188,6 +191,9 @@ test.describe('Identation', () => {
         </p>
         <table
           class="PlaygroundEditorTheme__table PlaygroundEditorTheme__tableSelection">
+          <colgroup>
+            <col style="width: 92px" />
+          </colgroup>
           <tr>
             <th
               class="PlaygroundEditorTheme__tableCell PlaygroundEditorTheme__tableCellHeader"
@@ -270,8 +276,8 @@ test.describe('Identation', () => {
           dir="ltr"
           spellcheck="false"
           data-gutter="1"
-          data-language="javascript"
-          data-highlight-language="javascript">
+          data-highlight-language="javascript"
+          data-language="javascript">
           <span data-lexical-text="true">code</span>
         </code>
         <p
@@ -281,6 +287,9 @@ test.describe('Identation', () => {
         </p>
         <table
           class="PlaygroundEditorTheme__table PlaygroundEditorTheme__tableSelection">
+          <colgroup>
+            <col style="width: 92px" />
+          </colgroup>
           <tr>
             <th
               class="PlaygroundEditorTheme__tableCell PlaygroundEditorTheme__tableCellHeader"
@@ -357,8 +366,8 @@ test.describe('Identation', () => {
           dir="ltr"
           spellcheck="false"
           data-gutter="1"
-          data-language="javascript"
-          data-highlight-language="javascript">
+          data-highlight-language="javascript"
+          data-language="javascript">
           <span data-lexical-text="true">code</span>
         </code>
         <p
@@ -368,6 +377,9 @@ test.describe('Identation', () => {
         </p>
         <table
           class="PlaygroundEditorTheme__table PlaygroundEditorTheme__tableSelection">
+          <colgroup>
+            <col style="width: 92px" />
+          </colgroup>
           <tr>
             <th
               class="PlaygroundEditorTheme__tableCell PlaygroundEditorTheme__tableCellHeader"
@@ -438,13 +450,16 @@ test.describe('Identation', () => {
           dir="ltr"
           spellcheck="false"
           data-gutter="1"
-          data-language="javascript"
-          data-highlight-language="javascript">
+          data-highlight-language="javascript"
+          data-language="javascript">
           <span data-lexical-text="true">code</span>
         </code>
         <p class="PlaygroundEditorTheme__paragraph" style=""><br /></p>
         <table
           class="PlaygroundEditorTheme__table PlaygroundEditorTheme__tableSelection">
+          <colgroup>
+            <col style="width: 92px" />
+          </colgroup>
           <tr>
             <th
               class="PlaygroundEditorTheme__tableCell PlaygroundEditorTheme__tableCellHeader"

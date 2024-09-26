@@ -6,7 +6,6 @@
  *
  */
 
-import type {TableCellNode} from './LexicalTableCellNode';
 import type {
   DOMConversionMap,
   DOMConversionOutput,
@@ -16,30 +15,99 @@ import type {
   LexicalNode,
   NodeKey,
   SerializedElementNode,
+  Spread,
 } from 'lexical';
 
-import {addClassNamesToElement, isHTMLElement} from '@lexical/utils';
+import {
+  addClassNamesToElement,
+  isHTMLElement,
+  removeClassNamesFromElement,
+} from '@lexical/utils';
 import {
   $applyNodeReplacement,
   $getNearestNodeFromDOMNode,
   ElementNode,
 } from 'lexical';
 
-import {$isTableCellNode} from './LexicalTableCellNode';
+import {$isTableCellNode, TableCellNode} from './LexicalTableCellNode';
 import {TableDOMCell, TableDOMTable} from './LexicalTableObserver';
-import {$isTableRowNode, TableRowNode} from './LexicalTableRowNode';
+import {TableRowNode} from './LexicalTableRowNode';
 import {getTable} from './LexicalTableSelectionHelpers';
 
-export type SerializedTableNode = SerializedElementNode;
+export type SerializedTableNode = Spread<
+  {
+    colWidths?: readonly number[];
+    rowStriping?: boolean;
+  },
+  SerializedElementNode
+>;
+
+function updateColgroup(
+  dom: HTMLElement,
+  config: EditorConfig,
+  colCount: number,
+  colWidths?: number[] | readonly number[],
+) {
+  const colGroup = dom.querySelector('colgroup');
+  if (!colGroup) {
+    return;
+  }
+  const cols = [];
+  for (let i = 0; i < colCount; i++) {
+    const col = document.createElement('col');
+    const width = colWidths && colWidths[i];
+    if (width) {
+      col.style.width = `${width}px`;
+    }
+    cols.push(col);
+  }
+  colGroup.replaceChildren(...cols);
+}
+
+function setRowStriping(
+  dom: HTMLElement,
+  config: EditorConfig,
+  rowStriping: boolean,
+) {
+  if (rowStriping) {
+    addClassNamesToElement(dom, config.theme.tableRowStriping);
+    dom.setAttribute('data-lexical-row-striping', 'true');
+  } else {
+    removeClassNamesFromElement(dom, config.theme.tableRowStriping);
+    dom.removeAttribute('data-lexical-row-striping');
+  }
+}
 
 /** @noInheritDoc */
 export class TableNode extends ElementNode {
+  /** @internal */
+  __rowStriping: boolean;
+  __colWidths?: number[] | readonly number[];
+
   static getType(): string {
     return 'table';
   }
 
+  getColWidths(): number[] | readonly number[] | undefined {
+    const self = this.getLatest();
+    return self.__colWidths;
+  }
+
+  setColWidths(colWidths: readonly number[]): this {
+    const self = this.getWritable();
+    // NOTE: Node properties should be immutable. Freeze to prevent accidental mutation.
+    self.__colWidths = __DEV__ ? Object.freeze(colWidths) : colWidths;
+    return self;
+  }
+
   static clone(node: TableNode): TableNode {
     return new TableNode(node.__key);
+  }
+
+  afterCloneFrom(prevNode: this) {
+    super.afterCloneFrom(prevNode);
+    this.__colWidths = prevNode.__colWidths;
+    this.__rowStriping = prevNode.__rowStriping;
   }
 
   static importDOM(): DOMConversionMap | null {
@@ -51,17 +119,23 @@ export class TableNode extends ElementNode {
     };
   }
 
-  static importJSON(_serializedNode: SerializedTableNode): TableNode {
-    return $createTableNode();
+  static importJSON(serializedNode: SerializedTableNode): TableNode {
+    const tableNode = $createTableNode();
+    tableNode.__rowStriping = serializedNode.rowStriping || false;
+    tableNode.__colWidths = serializedNode.colWidths;
+    return tableNode;
   }
 
   constructor(key?: NodeKey) {
     super(key);
+    this.__rowStriping = false;
   }
 
-  exportJSON(): SerializedElementNode {
+  exportJSON(): SerializedTableNode {
     return {
       ...super.exportJSON(),
+      colWidths: this.getColWidths(),
+      rowStriping: this.__rowStriping ? this.__rowStriping : undefined,
       type: 'table',
       version: 1,
     };
@@ -69,13 +143,32 @@ export class TableNode extends ElementNode {
 
   createDOM(config: EditorConfig, editor?: LexicalEditor): HTMLElement {
     const tableElement = document.createElement('table');
+    const colGroup = document.createElement('colgroup');
+    tableElement.appendChild(colGroup);
+    updateColgroup(
+      tableElement,
+      config,
+      this.getColumnCount(),
+      this.getColWidths(),
+    );
 
     addClassNamesToElement(tableElement, config.theme.table);
+    if (this.__rowStriping) {
+      setRowStriping(tableElement, config, true);
+    }
 
     return tableElement;
   }
 
-  updateDOM(): boolean {
+  updateDOM(
+    prevNode: TableNode,
+    dom: HTMLElement,
+    config: EditorConfig,
+  ): boolean {
+    if (prevNode.__rowStriping !== this.__rowStriping) {
+      setRowStriping(dom, config, this.__rowStriping);
+    }
+    updateColgroup(dom, config, this.getColumnCount(), this.getColWidths());
     return false;
   }
 
@@ -88,19 +181,10 @@ export class TableNode extends ElementNode {
           const colGroup = document.createElement('colgroup');
           const tBody = document.createElement('tbody');
           if (isHTMLElement(tableElement)) {
-            tBody.append(...tableElement.children);
-          }
-          const firstRow = this.getFirstChildOrThrow<TableRowNode>();
-
-          if (!$isTableRowNode(firstRow)) {
-            throw new Error('Expected to find row node.');
-          }
-
-          const colCount = firstRow.getChildrenSize();
-
-          for (let i = 0; i < colCount; i++) {
-            const col = document.createElement('col');
-            colGroup.append(col);
+            const cols = tableElement.querySelectorAll('col');
+            colGroup.append(...cols);
+            const rows = tableElement.querySelectorAll('tr');
+            tBody.append(...rows);
           }
 
           newElement.replaceChildren(colGroup, tBody);
@@ -162,7 +246,9 @@ export class TableNode extends ElementNode {
       return null;
     }
 
-    const cell = row[x];
+    const index = x < row.length ? x : row.length - 1;
+
+    const cell = row[index];
 
     if (cell == null) {
       return null;
@@ -219,12 +305,36 @@ export class TableNode extends ElementNode {
     return node;
   }
 
+  getRowStriping(): boolean {
+    return Boolean(this.getLatest().__rowStriping);
+  }
+
+  setRowStriping(newRowStriping: boolean): void {
+    this.getWritable().__rowStriping = newRowStriping;
+  }
+
   canSelectBefore(): true {
     return true;
   }
 
   canIndent(): false {
     return false;
+  }
+
+  getColumnCount(): number {
+    const firstRow = this.getFirstChild<TableRowNode>();
+    if (!firstRow) {
+      return 0;
+    }
+
+    let columnCount = 0;
+    firstRow.getChildren().forEach((cell) => {
+      if ($isTableCellNode(cell)) {
+        columnCount += cell.getColSpan();
+      }
+    });
+
+    return columnCount;
   }
 }
 
@@ -241,8 +351,14 @@ export function $getElementForTableNode(
   return getTable(tableElement);
 }
 
-export function $convertTableElement(_domNode: Node): DOMConversionOutput {
-  return {node: $createTableNode()};
+export function $convertTableElement(
+  domNode: HTMLElement,
+): DOMConversionOutput {
+  const tableNode = $createTableNode();
+  if (domNode.hasAttribute('data-lexical-row-striping')) {
+    tableNode.setRowStriping(true);
+  }
+  return {node: tableNode};
 }
 
 export function $createTableNode(): TableNode {

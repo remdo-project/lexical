@@ -6,21 +6,57 @@
  *
  */
 
-import {CodeNode} from '@lexical/code';
+import {$createCodeNode, CodeNode} from '@lexical/code';
 import {createHeadlessEditor} from '@lexical/headless';
 import {$generateHtmlFromNodes, $generateNodesFromDOM} from '@lexical/html';
 import {LinkNode} from '@lexical/link';
 import {ListItemNode, ListNode} from '@lexical/list';
 import {HeadingNode, QuoteNode} from '@lexical/rich-text';
-import {$getRoot, $insertNodes} from 'lexical';
+import {$createTextNode, $getRoot, $insertNodes} from 'lexical';
 
 import {
   $convertFromMarkdownString,
   $convertToMarkdownString,
   LINK,
   TextMatchTransformer,
+  Transformer,
   TRANSFORMERS,
 } from '../..';
+import {
+  MultilineElementTransformer,
+  normalizeMarkdown,
+} from '../../MarkdownTransformers';
+
+// Matches html within a mdx file
+const MDX_HTML_TRANSFORMER: MultilineElementTransformer = {
+  dependencies: [CodeNode],
+  export: (node) => {
+    if (node.getTextContent().startsWith('From HTML:')) {
+      return `<MyComponent>${node
+        .getTextContent()
+        .replace('From HTML: ', '')}</MyComponent>`;
+    }
+    return null; // Run next transformer
+  },
+  regExpEnd: /<\/(\w+)\s*>/,
+  regExpStart: /<(\w+)[^>]*>/,
+  replace: (rootNode, children, startMatch, endMatch, linesInBetween) => {
+    if (!linesInBetween) {
+      return false; // Run next transformer. We don't need to support markdown shortcuts for this test
+    }
+    if (startMatch[1] === 'MyComponent') {
+      const codeBlockNode = $createCodeNode(startMatch[1]);
+      const textNode = $createTextNode(
+        'From HTML: ' + linesInBetween.join('\n'),
+      );
+      codeBlockNode.append(textNode);
+      rootNode.append(codeBlockNode);
+      return;
+    }
+    return false; // Run next transformer
+  },
+  type: 'multiline-element',
+};
 
 describe('Markdown', () => {
   type Input = Array<{
@@ -29,6 +65,8 @@ describe('Markdown', () => {
     skipExport?: true;
     skipImport?: true;
     shouldPreserveNewLines?: true;
+    shouldMergeAdjacentLines?: true | false;
+    customTransformers?: Transformer[];
   }>;
 
   const URL = 'https://lexical.dev';
@@ -59,18 +97,37 @@ describe('Markdown', () => {
       md: '###### Hello world',
     },
     {
-      // Multiline paragraphs
-      html: '<p><span style="white-space: pre-wrap;">Hello</span><br><span style="white-space: pre-wrap;">world</span><br><span style="white-space: pre-wrap;">!</span></p>',
+      // Multiline paragraphs: https://spec.commonmark.org/dingus/?text=Hello%0Aworld%0A!
+      html: '<p><span style="white-space: pre-wrap;">Helloworld!</span></p>',
       md: ['Hello', 'world', '!'].join('\n'),
+      shouldMergeAdjacentLines: true,
+      skipExport: true,
+    },
+    {
+      // Multiline paragraphs
+      // TO-DO: It would be nice to support also hard line breaks (<br>) as \ or double spaces
+      // See https://spec.commonmark.org/0.31.2/#hard-line-breaks.
+      // Example: '<p><span style="white-space: pre-wrap;">Hello\\\nworld\\\n!</span></p>',
+      html: '<p><span style="white-space: pre-wrap;">Hello<br>world<br>!</span></p>',
+      md: ['Hello', 'world', '!'].join('\n'),
+      skipImport: true,
     },
     {
       html: '<blockquote><span style="white-space: pre-wrap;">Hello</span><br><span style="white-space: pre-wrap;">world!</span></blockquote>',
       md: '> Hello\n> world!',
     },
+    // TO-DO: <br> should be preserved
+    // {
+    //   html: '<ul><li value="1"><span style="white-space: pre-wrap;">Hello</span></li><li value="2"><span style="white-space: pre-wrap;">world<br>!<br>!</span></li></ul>',
+    //   md: '- Hello\n- world<br>!<br>!',
+    //   skipImport: true,
+    // },
     {
-      // Miltiline list items
-      html: '<ul><li value="1"><span style="white-space: pre-wrap;">Hello</span></li><li value="2"><span style="white-space: pre-wrap;">world</span><br><span style="white-space: pre-wrap;">!</span><br><span style="white-space: pre-wrap;">!</span></li></ul>',
+      // Multiline list items: https://spec.commonmark.org/dingus/?text=-%20Hello%0A-%20world%0A!%0A!
+      html: '<ul><li value="1"><span style="white-space: pre-wrap;">Hello</span></li><li value="2"><span style="white-space: pre-wrap;">world!!</span></li></ul>',
       md: '- Hello\n- world\n!\n!',
+      shouldMergeAdjacentLines: true,
+      skipExport: true,
     },
     {
       html: '<ul><li value="1"><span style="white-space: pre-wrap;">Hello</span></li><li value="2"><span style="white-space: pre-wrap;">world</span></li></ul>',
@@ -149,6 +206,22 @@ describe('Markdown', () => {
       md: '*Hello **world**!*',
     },
     {
+      html: '<p><span style="white-space: pre-wrap;">helloworld</span></p>',
+      md: 'hello\nworld',
+      shouldMergeAdjacentLines: true,
+      skipExport: true,
+    },
+    {
+      html: '<p><span style="white-space: pre-wrap;">hello</span><br><span style="white-space: pre-wrap;">world</span></p>',
+      md: 'hello\nworld',
+      shouldMergeAdjacentLines: false,
+    },
+    {
+      html: '<p><span style="white-space: pre-wrap;">hello</span><br><span style="white-space: pre-wrap;">world</span></p>',
+      md: 'hello\nworld',
+      shouldPreserveNewLines: true,
+    },
+    {
       html: '<h1><span style="white-space: pre-wrap;">Hello</span></h1><p><br></p><p><br></p><p><br></p><p><b><strong style="white-space: pre-wrap;">world</strong></b><span style="white-space: pre-wrap;">!</span></p>',
       md: '# Hello\n\n\n\n**world**!',
       shouldPreserveNewLines: true,
@@ -183,6 +256,24 @@ describe('Markdown', () => {
       skipExport: true,
     },
     {
+      html: '<pre spellcheck="false"><span style="white-space: pre-wrap;">Single line Code</span></pre>',
+      md: '```Single line Code```', // Ensure that "Single" is not read as the language by the code transformer. It should only be read as the language if there is a multi-line code block
+      skipExport: true, // Export will fail, as the code transformer will add new lines to the code block to make it multi-line. This is expected though, as the lexical code block is a block node and cannot be inline.
+    },
+    {
+      html: '<pre spellcheck="false" data-language="javascript" data-highlight-language="javascript"><span style="white-space: pre-wrap;">Incomplete tag</span></pre>',
+      md: '```javascript Incomplete tag',
+      skipExport: true,
+    },
+    {
+      html:
+        '<pre spellcheck="false" data-language="javascript" data-highlight-language="javascript"><span style="white-space: pre-wrap;">Incomplete multiline\n' +
+        '\n' +
+        'Tag</span></pre>',
+      md: '```javascript Incomplete multiline\n\nTag',
+      skipExport: true,
+    },
+    {
       html: '<pre spellcheck="false"><span style="white-space: pre-wrap;">Code</span></pre>',
       md: '```\nCode\n```',
     },
@@ -208,15 +299,24 @@ describe('Markdown', () => {
       skipExport: true,
     },
     {
+      html: `<h3><span style="white-space: pre-wrap;">Code blocks</span></h3><pre spellcheck="false" data-language="javascript" data-highlight-language="javascript"><span style="white-space: pre-wrap;">1 + 1 = 2;</span></pre>`,
+      md: `### Code blocks
+
+\`\`\`javascript
+1 + 1 = 2;
+\`\`\``,
+    },
+    {
       // Import only: extra empty lines will be removed for export
       html: '<p><span style="white-space: pre-wrap;">Hello</span></p><p><span style="white-space: pre-wrap;">world</span></p>',
       md: ['Hello', '', '', '', 'world'].join('\n'),
       skipExport: true,
     },
     {
-      // Import only: multiline quote will be prefixed with ">" on each line during export
-      html: '<blockquote><span style="white-space: pre-wrap;">Hello</span><br><span style="white-space: pre-wrap;">world</span><br><span style="white-space: pre-wrap;">!</span></blockquote>',
+      // https://spec.commonmark.org/dingus/?text=%3E%20Hello%0Aworld%0A!
+      html: '<blockquote><span style="white-space: pre-wrap;">Helloworld!</span></blockquote>',
       md: '> Hello\nworld\n!',
+      shouldMergeAdjacentLines: true,
       skipExport: true,
     },
     {
@@ -230,6 +330,19 @@ describe('Markdown', () => {
       html: "<p><span style='white-space: pre-wrap;'>$$H$&e$`l$'l$o$</span></p>",
       md: "$$H$&e$`l$'l$o$",
       skipImport: true,
+    },
+    {
+      customTransformers: [MDX_HTML_TRANSFORMER],
+      html: '<p><span style="white-space: pre-wrap;">Some HTML in mdx:</span></p><pre spellcheck="false" data-language="MyComponent"><span style="white-space: pre-wrap;">From HTML: Some Text</span></pre>',
+      md: 'Some HTML in mdx:\n\n<MyComponent>Some Text</MyComponent>',
+      shouldMergeAdjacentLines: true,
+    },
+    {
+      customTransformers: [MDX_HTML_TRANSFORMER],
+      html: '<p><span style="white-space: pre-wrap;">Some HTML in mdx:</span></p><pre spellcheck="false" data-language="MyComponent"><span style="white-space: pre-wrap;">From HTML: Line 1Some Text</span></pre>',
+      md: 'Some HTML in mdx:\n\n<MyComponent>Line 1\nSome Text</MyComponent>',
+      shouldMergeAdjacentLines: true,
+      skipExport: true,
     },
   ];
 
@@ -246,6 +359,8 @@ describe('Markdown', () => {
     md,
     skipImport,
     shouldPreserveNewLines,
+    shouldMergeAdjacentLines,
+    customTransformers,
   } of IMPORT_AND_EXPORT) {
     if (skipImport) {
       continue;
@@ -267,9 +382,14 @@ describe('Markdown', () => {
         () =>
           $convertFromMarkdownString(
             md,
-            [...TRANSFORMERS, HIGHLIGHT_TEXT_MATCH_IMPORT],
+            [
+              ...(customTransformers || []),
+              ...TRANSFORMERS,
+              HIGHLIGHT_TEXT_MATCH_IMPORT,
+            ],
             undefined,
             shouldPreserveNewLines,
+            shouldMergeAdjacentLines,
           ),
         {
           discrete: true,
@@ -287,6 +407,7 @@ describe('Markdown', () => {
     md,
     skipExport,
     shouldPreserveNewLines,
+    customTransformers,
   } of IMPORT_AND_EXPORT) {
     if (skipExport) {
       continue;
@@ -322,7 +443,7 @@ describe('Markdown', () => {
           .getEditorState()
           .read(() =>
             $convertToMarkdownString(
-              TRANSFORMERS,
+              [...(customTransformers || []), ...TRANSFORMERS],
               undefined,
               shouldPreserveNewLines,
             ),
@@ -330,4 +451,157 @@ describe('Markdown', () => {
       ).toBe(md);
     });
   }
+});
+
+describe('normalizeMarkdown - shouldMergeAdjacentLines = true', () => {
+  it('should combine lines separated by a single \n unless they are in a codeblock', () => {
+    const markdown = `
+A1
+A2
+
+A3
+
+\`\`\`md
+B1
+B2
+
+B3
+\`\`\`
+
+C1
+C2
+
+C3
+
+\`\`\`js
+D1
+D2
+
+D3
+\`\`\`
+
+\`\`\`single line code\`\`\`
+
+E1
+E2
+
+E3
+`;
+    expect(normalizeMarkdown(markdown, true)).toBe(`
+A1A2
+
+A3
+
+\`\`\`md
+B1
+B2
+
+B3
+\`\`\`
+
+C1C2
+
+C3
+
+\`\`\`js
+D1
+D2
+
+D3
+\`\`\`
+
+\`\`\`single line code\`\`\`
+
+E1E2
+
+E3
+`);
+  });
+
+  it('tables', () => {
+    const markdown = `
+| a | b |
+| --- | --- |
+| c | d |
+`;
+    expect(normalizeMarkdown(markdown, true)).toBe(markdown);
+  });
+});
+
+describe('normalizeMarkdown - shouldMergeAdjacentLines = false', () => {
+  it('should not combine lines separated by a single \n', () => {
+    const markdown = `
+A1
+A2
+
+A3
+
+\`\`\`md
+B1
+B2
+
+B3
+\`\`\`
+
+C1
+C2
+
+C3
+
+\`\`\`js
+D1
+D2
+
+D3
+\`\`\`
+
+\`\`\`single line code\`\`\`
+
+E1
+E2
+
+E3
+`;
+    expect(normalizeMarkdown(markdown, false)).toBe(`
+A1
+A2
+
+A3
+
+\`\`\`md
+B1
+B2
+
+B3
+\`\`\`
+
+C1
+C2
+
+C3
+
+\`\`\`js
+D1
+D2
+
+D3
+\`\`\`
+
+\`\`\`single line code\`\`\`
+
+E1
+E2
+
+E3
+`);
+  });
+
+  it('tables', () => {
+    const markdown = `
+| a | b |
+| --- | --- |
+| c | d |
+`;
+    expect(normalizeMarkdown(markdown, false)).toBe(markdown);
+  });
 });

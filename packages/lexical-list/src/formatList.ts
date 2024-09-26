@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
+
 import {$getNearestNodeOfType} from '@lexical/utils';
 import {
   $createParagraphNode,
@@ -299,7 +300,7 @@ export function updateChildrenListItemValue(list: ListNode): void {
       if (child.getValue() !== value) {
         child.setValue(value);
       }
-      //if (isNotChecklist && child.getChecked() != null) {
+      //if (isNotChecklist && child.getLatest().__checked != null) {
       //  child.setChecked(undefined);
       //}
       if (!$isListNode(child.getFirstChild())) {

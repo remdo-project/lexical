@@ -21,12 +21,13 @@ import {
   $getRoot,
   $getSelection,
   $isElementNode,
+  $isParagraphNode,
   $setSelection,
   SELECTION_CHANGE_COMMAND,
 } from 'lexical';
 import invariant from 'shared/invariant';
 
-import {$isTableCellNode} from './LexicalTableCellNode';
+import {$isTableCellNode, TableCellNode} from './LexicalTableCellNode';
 import {$isTableNode} from './LexicalTableNode';
 import {
   $createTableSelection,
@@ -73,6 +74,8 @@ export class TableObserver {
   tableSelection: TableSelection | null;
   hasHijackedSelectionStyles: boolean;
   isSelecting: boolean;
+  abortController: AbortController;
+  listenerOptions: {signal: AbortSignal};
 
   constructor(editor: LexicalEditor, tableNodeKey: string) {
     this.isHighlightingCells = false;
@@ -96,6 +99,8 @@ export class TableObserver {
     this.hasHijackedSelectionStyles = false;
     this.trackTable();
     this.isSelecting = false;
+    this.abortController = new AbortController();
+    this.listenerOptions = {signal: this.abortController.signal};
   }
 
   getTable(): TableDOMTable {
@@ -103,9 +108,11 @@ export class TableObserver {
   }
 
   removeListeners() {
+    this.abortController.abort('removeListeners');
     Array.from(this.listenersToRemove).forEach((removeListener) =>
       removeListener(),
     );
+    this.listenersToRemove.clear();
   }
 
   trackTable() {
@@ -151,6 +158,7 @@ export class TableObserver {
 
       this.table = getTable(tableElement);
       observer.observe(tableElement, {
+        attributes: true,
         childList: true,
         subtree: true,
       });
@@ -349,12 +357,16 @@ export class TableObserver {
       const anchor = formatSelection.anchor;
       const focus = formatSelection.focus;
 
-      selection.getNodes().forEach((cellNode) => {
-        if ($isTableCellNode(cellNode) && cellNode.getTextContentSize() !== 0) {
-          anchor.set(cellNode.getKey(), 0, 'element');
-          focus.set(cellNode.getKey(), cellNode.getChildrenSize(), 'element');
-          formatSelection.formatText(type);
-        }
+      const cellNodes = selection.getNodes().filter($isTableCellNode);
+      const paragraph = cellNodes[0].getFirstChild();
+      const alignFormatWith = $isParagraphNode(paragraph)
+        ? paragraph.getFormatFlags(type, null)
+        : null;
+
+      cellNodes.forEach((cellNode: TableCellNode) => {
+        anchor.set(cellNode.getKey(), 0, 'element');
+        focus.set(cellNode.getKey(), cellNode.getChildrenSize(), 'element');
+        formatSelection.formatText(type, alignFormatWith);
       });
 
       $setSelection(selection);

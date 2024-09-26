@@ -30,6 +30,7 @@ import {
   $applyNodeReplacement,
   getCachedClassNameArray,
   isHTMLElement,
+  toggleTextFormatType,
 } from '../LexicalUtils';
 import {ElementNode} from './LexicalElementNode';
 import {$isTextNode, TextFormatType} from './LexicalTextNode';
@@ -37,6 +38,7 @@ import {$isTextNode, TextFormatType} from './LexicalTextNode';
 export type SerializedParagraphNode = Spread<
   {
     textFormat: number;
+    textStyle: string;
   },
   SerializedElementNode
 >;
@@ -46,10 +48,12 @@ export class ParagraphNode extends ElementNode {
   ['constructor']!: KlassConstructor<typeof ParagraphNode>;
   /** @internal */
   __textFormat: number;
+  __textStyle: string;
 
   constructor(key?: NodeKey) {
     super(key);
     this.__textFormat = 0;
+    this.__textStyle = '';
   }
 
   static getType(): string {
@@ -72,8 +76,36 @@ export class ParagraphNode extends ElementNode {
     return (this.getTextFormat() & formatFlag) !== 0;
   }
 
+  /**
+   * Returns the format flags applied to the node as a 32-bit integer.
+   *
+   * @returns a number representing the TextFormatTypes applied to the node.
+   */
+  getFormatFlags(type: TextFormatType, alignWithFormat: null | number): number {
+    const self = this.getLatest();
+    const format = self.__textFormat;
+    return toggleTextFormatType(format, type, alignWithFormat);
+  }
+
+  getTextStyle(): string {
+    const self = this.getLatest();
+    return self.__textStyle;
+  }
+
+  setTextStyle(style: string): this {
+    const self = this.getWritable();
+    self.__textStyle = style;
+    return self;
+  }
+
   static clone(node: ParagraphNode): ParagraphNode {
     return new ParagraphNode(node.__key);
+  }
+
+  afterCloneFrom(prevNode: this) {
+    super.afterCloneFrom(prevNode);
+    this.__textFormat = prevNode.__textFormat;
+    this.__textStyle = prevNode.__textStyle;
   }
 
   // View
@@ -145,6 +177,7 @@ export class ParagraphNode extends ElementNode {
     return {
       ...super.exportJSON(),
       textFormat: this.getTextFormat(),
+      textStyle: this.getTextStyle(),
       type: 'paragraph',
       version: 1,
     };
@@ -158,9 +191,11 @@ export class ParagraphNode extends ElementNode {
   ): ParagraphNode {
     const newElement = $createParagraphNode();
     newElement.setTextFormat(rangeSelection.format);
+    newElement.setTextStyle(rangeSelection.style);
     const direction = this.getDirection();
     newElement.setDirection(direction);
     newElement.setFormat(this.getFormatType());
+    newElement.setStyle(this.getTextStyle());
     this.insertAfter(newElement, restoreSelection);
     return newElement;
   }

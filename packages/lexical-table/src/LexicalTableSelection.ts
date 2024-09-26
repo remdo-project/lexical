@@ -157,8 +157,8 @@ export class TableSelection implements BaseSelection {
       focusCellNodeRect.columnIndex,
     );
     const stopX = Math.max(
-      anchorCellNodeRect.columnIndex,
-      focusCellNodeRect.columnIndex,
+      anchorCellNodeRect.columnIndex + anchorCellNodeRect.colSpan - 1,
+      focusCellNodeRect.columnIndex + focusCellNodeRect.colSpan - 1,
     );
 
     const startY = Math.min(
@@ -166,8 +166,8 @@ export class TableSelection implements BaseSelection {
       focusCellNodeRect.rowIndex,
     );
     const stopY = Math.max(
-      anchorCellNodeRect.rowIndex,
-      focusCellNodeRect.rowIndex,
+      anchorCellNodeRect.rowIndex + anchorCellNodeRect.rowSpan - 1,
+      focusCellNodeRect.rowIndex + focusCellNodeRect.rowSpan - 1,
     );
 
     return {
@@ -306,7 +306,11 @@ export class TableSelection implements BaseSelection {
       }
     }
 
-    const nodes: Array<LexicalNode> = [tableNode];
+    // We use a Map here because merged cells in the grid would otherwise
+    // show up multiple times in the nodes array
+    const nodeMap: Map<NodeKey, LexicalNode> = new Map([
+      [tableNode.getKey(), tableNode],
+    ]);
     let lastRow = null;
     for (let i = minRow; i <= maxRow; i++) {
       for (let j = minColumn; j <= maxColumn; j++) {
@@ -317,12 +321,16 @@ export class TableSelection implements BaseSelection {
           'Expected TableCellNode parent to be a TableRowNode',
         );
         if (currentRow !== lastRow) {
-          nodes.push(currentRow);
+          nodeMap.set(currentRow.getKey(), currentRow);
         }
-        nodes.push(cell, ...$getChildrenRecursively(cell));
+        nodeMap.set(cell.getKey(), cell);
+        for (const child of $getChildrenRecursively(cell)) {
+          nodeMap.set(child.getKey(), child);
+        }
         lastRow = currentRow;
       }
     }
+    const nodes = Array.from(nodeMap.values());
 
     if (!isCurrentlyReadOnlyMode()) {
       this._cachedNodes = nodes;
@@ -331,10 +339,13 @@ export class TableSelection implements BaseSelection {
   }
 
   getTextContent(): string {
-    const nodes = this.getNodes();
+    const nodes = this.getNodes().filter((node) => $isTableCellNode(node));
     let textContent = '';
     for (let i = 0; i < nodes.length; i++) {
-      textContent += nodes[i].getTextContent();
+      const node = nodes[i];
+      const row = node.__parent;
+      const nextRow = (nodes[i + 1] || {}).__parent;
+      textContent += node.getTextContent() + (nextRow !== row ? '\n' : '\t');
     }
     return textContent;
   }

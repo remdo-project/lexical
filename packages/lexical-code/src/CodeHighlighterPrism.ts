@@ -25,8 +25,4 @@ import 'prismjs/components/prism-typescript';
 import 'prismjs/components/prism-java';
 import 'prismjs/components/prism-cpp';
 
-declare global {
-  interface Window {
-    Prism: typeof import('prismjs');
-  }
-}
+export const Prism: typeof import('prismjs') = globalThis.Prism || window.Prism;

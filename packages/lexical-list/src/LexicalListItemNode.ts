@@ -7,7 +7,7 @@
  */
 
 /* eslint-disable lexical/no-optional-chaining */
-import type {ListNode} from './';
+import type {ListNode, ListType} from './';
 import type {
   BaseSelection,
   DOMConversionMap,
@@ -407,7 +407,14 @@ export class ListItemNode extends ElementNode {
   getChecked(): boolean | undefined {
     const self = this.getLatest();
 
-    return self.__checked;
+    let listType: ListType | undefined;
+
+    const parent = this.getParent();
+    if ($isListNode(parent)) {
+      listType = parent.getListType();
+    }
+
+    return listType === 'check' ? Boolean(self.__checked) : undefined;
   }
 
   setChecked(checked?: boolean): void {
@@ -437,10 +444,9 @@ export class ListItemNode extends ElementNode {
   }
 
   setIndent(indent: number): this {
-    invariant(
-      typeof indent === 'number' && indent > -1,
-      'Invalid indent value.',
-    );
+    invariant(typeof indent === 'number', 'Invalid indent value.');
+    indent = Math.floor(indent);
+    invariant(indent >= 0, 'Indent value must be non-negative.');
     let currentIndent = this.getIndent();
     while (currentIndent !== indent) {
       if (currentIndent < indent) {
@@ -490,6 +496,10 @@ export class ListItemNode extends ElementNode {
 
   createParentElementNode(): ElementNode {
     return $createListNode('bullet');
+  }
+
+  canMergeWhenEmpty(): true {
+    return true;
   }
 }
 
