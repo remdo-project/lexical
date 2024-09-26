@@ -407,14 +407,16 @@ export class ListItemNode extends ElementNode {
   getChecked(): boolean | undefined {
     const self = this.getLatest();
 
-    let listType: ListType | undefined;
-
-    const parent = this.getParent();
-    if ($isListNode(parent)) {
-      listType = parent.getListType();
-    }
-
-    return listType === 'check' ? Boolean(self.__checked) : undefined;
+    //remdo customisation
+    //let listType: ListType | undefined;
+    //
+    //const parent = this.getParent();
+    //if ($isListNode(parent)) {
+    //  listType = parent.getListType();
+    //}
+    //
+    //return listType === 'check' ? Boolean(self.__checked) : undefined;
+    return self.__checked;
   }
 
   setChecked(checked?: boolean): void {

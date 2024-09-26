@@ -1289,4 +1289,5 @@ export class LexicalEditor {
   }
 }
 
-LexicalEditor.version = process.env.LEXICAL_VERSION;
+//remdo customization
+//LexicalEditor.version = process.env.LEXICAL_VERSION;
