@@ -45,6 +45,7 @@ import {isNestedListNode} from './utils';
 
 export type SerializedListItemNode = Spread<
   {
+    id: string; //remdo customisation
     folded: boolean | undefined; //remdo customisation
     checked: boolean | undefined;
     value: number;
@@ -230,6 +231,7 @@ export class ListItemNode extends ElementNode {
       ...super.exportJSON(),
       checked: this.getChecked(),
       folded: this.getFolded(), //remdo customisation
+      id: this.getID(), //remdo customisation
       type: 'listitem',
       value: this.getValue(),
       version: 1,
