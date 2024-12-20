@@ -29,6 +29,7 @@ export type {
   SerializedEditor,
   Spread,
   Transform,
+  UpdateListener,
 } from './LexicalEditor';
 export type {
   EditorState,
@@ -42,6 +43,7 @@ export type {
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
+  DOMExportOutputMap,
   LexicalNode,
   NodeKey,
   NodeMap,
@@ -57,6 +59,7 @@ export type {
   TextPointType as TextPoint,
 } from './LexicalSelection';
 export type {
+  ElementDOMSlot,
   ElementFormatType,
   SerializedElementNode,
 } from './nodes/LexicalElementNode';
@@ -172,14 +175,20 @@ export {
   $isRootOrShadowRoot,
   $isTokenOrSegmented,
   $nodesOfType,
+  $onUpdate,
   $selectAll,
   $setCompositionKey,
   $setSelection,
   $splitNode,
+  getDOMSelection,
+  getDOMTextNode,
   getEditorPropertyFromDOMNode,
   getNearestEditorFromDOMNode,
   isBlockDomNode,
   isDocumentFragment,
+  isDOMNode,
+  isDOMTextNode,
+  isDOMUnmanaged,
   isHTMLAnchorElement,
   isHTMLElement,
   isInlineDomNode,
@@ -187,6 +196,8 @@ export {
   isSelectionCapturedInDecoratorInput,
   isSelectionWithinEditor,
   resetRandomKey,
+  setDOMUnmanaged,
+  setNodeIndentFromDOM,
 } from './LexicalUtils';
 export {ArtificialNode__DO_NOT_USE} from './nodes/ArtificialNode';
 export {$isDecoratorNode, DecoratorNode} from './nodes/LexicalDecoratorNode';

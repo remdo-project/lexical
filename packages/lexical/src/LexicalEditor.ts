@@ -5,12 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  *
  */
-import {$getRoot, $getSelection, TextNode} from '.';
-import {FULL_RECONCILE, NO_DIRTY_NODES} from './LexicalConstants';
+
 import type {EditorState, SerializedEditorState} from './LexicalEditorState';
-import {createEmptyEditorState} from './LexicalEditorState';
-import {addRootElementEvents, removeRootElementEvents} from './LexicalEvents';
-import {$flushRootMutations, initMutationObserver} from './LexicalMutations';
 import type {
   DOMConversion,
   DOMConversionMap,
@@ -18,6 +14,14 @@ import type {
   DOMExportOutputMap,
   NodeKey,
 } from './LexicalNode';
+
+import invariant from 'shared/invariant';
+
+import {$getRoot, $getSelection, TextNode} from '.';
+import {FULL_RECONCILE, NO_DIRTY_NODES} from './LexicalConstants';
+import {cloneEditorState, createEmptyEditorState} from './LexicalEditorState';
+import {addRootElementEvents, removeRootElementEvents} from './LexicalEvents';
+import {$flushRootMutations, initMutationObserver} from './LexicalMutations';
 import {LexicalNode} from './LexicalNode';
 import {
   $commitPendingUpdates,
@@ -33,7 +37,7 @@ import {
   getCachedTypeToNodeMap,
   getDefaultView,
   getDOMSelection,
-  markAllNodesAsDirty,
+  markNodesWithTypesAsDirty,
 } from './LexicalUtils';
 import {RemdoState} from './RemdoState';
 import {ArtificialNode__DO_NOT_USE} from './nodes/ArtificialNode';
@@ -42,8 +46,6 @@ import {LineBreakNode} from './nodes/LexicalLineBreakNode';
 import {ParagraphNode} from './nodes/LexicalParagraphNode';
 import {RootNode} from './nodes/LexicalRootNode';
 import {TabNode} from './nodes/LexicalTabNode';
-import invariant from 'shared/invariant';
-
 export type Spread<T1, T2> = Omit<T2, keyof T1> & T1;
 
 // https://github.com/microsoft/TypeScript/issues/3841
@@ -67,6 +69,9 @@ export type TextNodeThemeClasses = {
   code?: EditorThemeClassName;
   highlight?: EditorThemeClassName;
   italic?: EditorThemeClassName;
+  lowercase?: EditorThemeClassName;
+  uppercase?: EditorThemeClassName;
+  capitalize?: EditorThemeClassName;
   strikethrough?: EditorThemeClassName;
   subscript?: EditorThemeClassName;
   superscript?: EditorThemeClassName;
@@ -96,6 +101,7 @@ export type EditorThemeClasses = {
   code?: EditorThemeClassName;
   codeHighlight?: Record<string, EditorThemeClassName>;
   hashtag?: EditorThemeClassName;
+  specialText?: EditorThemeClassName;
   heading?: {
     h1?: EditorThemeClassName;
     h2?: EditorThemeClassName;
@@ -128,21 +134,20 @@ export type EditorThemeClasses = {
   quote?: EditorThemeClassName;
   root?: EditorThemeClassName;
   rtl?: EditorThemeClassName;
+  tab?: EditorThemeClassName;
   table?: EditorThemeClassName;
   tableAddColumns?: EditorThemeClassName;
   tableAddRows?: EditorThemeClassName;
   tableCellActionButton?: EditorThemeClassName;
   tableCellActionButtonContainer?: EditorThemeClassName;
-  tableCellPrimarySelected?: EditorThemeClassName;
   tableCellSelected?: EditorThemeClassName;
   tableCell?: EditorThemeClassName;
-  tableCellEditing?: EditorThemeClassName;
   tableCellHeader?: EditorThemeClassName;
   tableCellResizer?: EditorThemeClassName;
-  tableCellSortedIndicator?: EditorThemeClassName;
-  tableResizeRuler?: EditorThemeClassName;
   tableRow?: EditorThemeClassName;
+  tableScrollableWrapper?: EditorThemeClassName;
   tableSelected?: EditorThemeClassName;
+  tableSelection?: EditorThemeClassName;
   text?: TextNodeThemeClasses;
   embedBlock?: {
     base?: EditorThemeClassName;
@@ -212,13 +217,13 @@ export interface MutationListenerOptions {
   /**
    * Skip the initial call of the listener with pre-existing DOM nodes.
    *
-   * The default is currently true for backwards compatibility with <= 0.16.1
-   * but this default is expected to change to false in 0.17.0.
+   * The default was previously true for backwards compatibility with <= 0.16.1
+   * but this default has been changed to false as of 0.21.0.
    */
   skipInitialization?: boolean;
 }
 
-const DEFAULT_SKIP_INITIALIZATION = true;
+const DEFAULT_SKIP_INITIALIZATION = false;
 
 export type UpdateListener = (arg0: {
   dirtyElements: Map<NodeKey, IntentionallyMarkedAsDirtyElement>;
@@ -277,11 +282,11 @@ export type LexicalCommand<TPayload> = {
  *
  * editor.registerCommand(MY_COMMAND, payload => {
  *   // Type of `payload` is inferred here. But lets say we want to extract a function to delegate to
- *   handleMyCommand(editor, payload);
+ *   $handleMyCommand(editor, payload);
  *   return true;
  * });
  *
- * function handleMyCommand(editor: LexicalEditor, payload: CommandPayloadType<typeof MY_COMMAND>) {
+ * function $handleMyCommand(editor: LexicalEditor, payload: CommandPayloadType<typeof MY_COMMAND>) {
  *   // `payload` is of type `SomeType`, extracted from the command.
  * }
  * ```
@@ -778,14 +783,24 @@ export class LexicalEditor {
   }
   /**
    * Registers a listener that will trigger anytime the provided command
-   * is dispatched, subject to priority. Listeners that run at a higher priority can "intercept"
-   * commands and prevent them from propagating to other handlers by returning true.
+   * is dispatched with {@link LexicalEditor.dispatch}, subject to priority.
+   * Listeners that run at a higher priority can "intercept" commands and
+   * prevent them from propagating to other handlers by returning true.
    *
-   * Listeners registered at the same priority level will run deterministically in the order of registration.
+   * Listeners are always invoked in an {@link LexicalEditor.update} and can
+   * call dollar functions.
+   *
+   * Listeners registered at the same priority level will run
+   * deterministically in the order of registration.
    *
    * @param command - the command that will trigger the callback.
    * @param listener - the function that will execute when the command is dispatched.
    * @param priority - the relative priority of the listener. 0 | 1 | 2 | 3 | 4
+   *   (or {@link COMMAND_PRIORITY_EDITOR} |
+   *     {@link COMMAND_PRIORITY_LOW} |
+   *     {@link COMMAND_PRIORITY_NORMAL} |
+   *     {@link COMMAND_PRIORITY_HIGH} |
+   *     {@link COMMAND_PRIORITY_CRITICAL})
    * @returns a teardown function that can be used to cleanup the listener.
    */
   registerCommand<P>(
@@ -845,7 +860,7 @@ export class LexicalEditor {
    * If any existing nodes are in the DOM, and skipInitialization is not true, the listener
    * will be called immediately with an updateTag of 'registerMutationListener' where all
    * nodes have the 'created' NodeMutation. This can be controlled with the skipInitialization option
-   * (default is currently true for backwards compatibility in 0.16.x but will change to false in 0.17.0).
+   * (whose default was previously true for backwards compatibility with &lt;=0.16.1 but has been changed to false as of 0.21.0).
    *
    * @param klass - The class of the node that you want to listen to mutations on.
    * @param listener - The logic you want to run when the node is mutated.
@@ -963,7 +978,10 @@ export class LexicalEditor {
       registeredNodes.push(registeredReplaceWithNode);
     }
 
-    markAllNodesAsDirty(this, klass.getType());
+    markNodesWithTypesAsDirty(
+      this,
+      registeredNodes.map((node) => node.klass.getType()),
+    );
     return () => {
       registeredNodes.forEach((node) =>
         node.transforms.delete(listener as Transform<LexicalNode>),
@@ -992,7 +1010,10 @@ export class LexicalEditor {
   /**
    * Dispatches a command of the specified type with the specified payload.
    * This triggers all command listeners (set by {@link LexicalEditor.registerCommand})
-   * for this type, passing them the provided payload.
+   * for this type, passing them the provided payload. The command listeners
+   * will be triggered in an implicit {@link LexicalEditor.update}, unless
+   * this was invoked from inside an update in which case that update context
+   * will be re-used (as if this was a dollar function itself).
    * @param type - the type of command listeners to trigger.
    * @param payload - the data to pass as an argument to the command listeners.
    */
@@ -1074,6 +1095,19 @@ export class LexicalEditor {
         if (classNames != null) {
           nextRootElement.classList.add(...classNames);
         }
+        if (__DEV__) {
+          const nextRootElementParent = nextRootElement.parentElement;
+          if (
+            nextRootElementParent != null &&
+            ['flex', 'inline-flex'].includes(
+              getComputedStyle(nextRootElementParent).display,
+            )
+          ) {
+            console.warn(
+              `When using "display: flex" or "display: inline-flex" on an element containing content editable, Chrome may have unwanted focusing behavior when clicking outside of it. Consider wrapping the content editable within a non-flex element.`,
+            );
+          }
+        }
       } else {
         // If content editable is unmounted we'll reset editor state back to original
         // (or pending) editor state since there will be no reconciliation
@@ -1116,6 +1150,16 @@ export class LexicalEditor {
       );
     }
 
+    // Ensure that we have a writable EditorState so that transforms can run
+    // during a historic operation
+    let writableEditorState = editorState;
+    if (writableEditorState._readOnly) {
+      writableEditorState = cloneEditorState(editorState);
+      writableEditorState._selection = editorState._selection
+        ? editorState._selection.clone()
+        : null;
+    }
+
     $flushRootMutations(this);
     const pendingEditorState = this._pendingEditorState;
     const tags = this._updateTags;
@@ -1125,11 +1169,10 @@ export class LexicalEditor {
       if (tag != null) {
         tags.add(tag);
       }
-
       $commitPendingUpdates(this);
     }
 
-    this._pendingEditorState = editorState;
+    this._pendingEditorState = writableEditorState;
     this._dirtyType = FULL_RECONCILE;
     this._dirtyElements.set('root', false);
     this._compositionKey = null;
@@ -1138,7 +1181,12 @@ export class LexicalEditor {
       tags.add(tag);
     }
 
-    $commitPendingUpdates(this);
+    // Only commit pending updates if not already in an editor.update
+    // (e.g. dispatchCommand) otherwise this will cause a second commit
+    // with an already read-only state and selection
+    if (!this._updating) {
+      $commitPendingUpdates(this);
+    }
   }
 
   /**

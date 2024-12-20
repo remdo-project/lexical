@@ -12,7 +12,6 @@ import {
   $getSelection,
   $isElementNode,
   $isLeafNode,
-  $isParagraphNode,
   $isRangeSelection,
   $isRootOrShadowRoot,
   ElementNode,
@@ -157,36 +156,38 @@ function $createListOrMerge(node: ElementNode, listType: ListType): ListNode {
   const previousSibling = node.getPreviousSibling();
   const nextSibling = node.getNextSibling();
   const listItem = $createListItemNode();
-  listItem.setFormat(node.getFormatType());
-  listItem.setIndent(node.getIndent());
   append(listItem, node.getChildren());
 
+  let targetList;
   if (
     $isListNode(previousSibling) &&
     listType === previousSibling.getListType()
   ) {
     previousSibling.append(listItem);
-    node.remove();
     // if the same type of list is on both sides, merge them.
-
     if ($isListNode(nextSibling) && listType === nextSibling.getListType()) {
       append(previousSibling, nextSibling.getChildren());
       nextSibling.remove();
     }
-    return previousSibling;
+    targetList = previousSibling;
   } else if (
     $isListNode(nextSibling) &&
     listType === nextSibling.getListType()
   ) {
     nextSibling.getFirstChildOrThrow().insertBefore(listItem);
-    node.remove();
-    return nextSibling;
+    targetList = nextSibling;
   } else {
     const list = $createListNode(listType);
     list.append(listItem);
     node.replace(list);
-    return list;
+    targetList = list;
   }
+  // listItem needs to be attached to root prior to setting indent
+  listItem.setFormat(node.getFormatType());
+  listItem.setIndent(node.getIndent());
+  node.remove();
+
+  return targetList;
 }
 
 /**
@@ -495,10 +496,12 @@ export function $handleListInsertParagraph(): boolean {
 
   const grandparent = parent.getParent();
 
-  let replacementNode;
+  let replacementNode: ParagraphNode | ListItemNode;
 
   if ($isRootOrShadowRoot(grandparent)) {
     replacementNode = $createParagraphNode();
+    replacementNode.setTextStyle(selection.style);
+    replacementNode.setTextFormat(selection.format);
     topListNode.insertAfter(replacementNode);
   } else if ($isListItemNode(grandparent)) {
     replacementNode = $createListItemNode();
@@ -512,18 +515,14 @@ export function $handleListInsertParagraph(): boolean {
 
   if (nextSiblings.length > 0) {
     const newList = $createListNode(parent.getListType());
-
-    if ($isParagraphNode(replacementNode)) {
-      replacementNode.insertAfter(newList);
-    } else {
+    if ($isListItemNode(replacementNode)) {
       const newListItem = $createListItemNode();
       newListItem.append(newList);
       replacementNode.insertAfter(newListItem);
+    } else {
+      replacementNode.insertAfter(newList);
     }
-    nextSiblings.forEach((sibling) => {
-      sibling.remove();
-      newList.append(sibling);
-    });
+    newList.append(...nextSiblings);
   }
 
   // Don't leave hanging nested empty lists

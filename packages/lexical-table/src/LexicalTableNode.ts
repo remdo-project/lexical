@@ -6,33 +6,41 @@
  *
  */
 
-import type {
-  DOMConversionMap,
-  DOMConversionOutput,
-  DOMExportOutput,
-  EditorConfig,
-  LexicalEditor,
-  LexicalNode,
-  NodeKey,
-  SerializedElementNode,
-  Spread,
-} from 'lexical';
-
 import {
+  $descendantsMatching,
   addClassNamesToElement,
   isHTMLElement,
   removeClassNamesFromElement,
 } from '@lexical/utils';
 import {
   $applyNodeReplacement,
+  $getEditor,
   $getNearestNodeFromDOMNode,
+  BaseSelection,
+  DOMConversionMap,
+  DOMConversionOutput,
+  DOMExportOutput,
+  EditorConfig,
+  ElementDOMSlot,
   ElementNode,
+  LexicalEditor,
+  LexicalNode,
+  NodeKey,
+  SerializedElementNode,
+  setDOMUnmanaged,
+  Spread,
 } from 'lexical';
+import invariant from 'shared/invariant';
 
-import {$isTableCellNode, TableCellNode} from './LexicalTableCellNode';
+import {PIXEL_VALUE_REG_EXP} from './constants';
+import {$isTableCellNode, type TableCellNode} from './LexicalTableCellNode';
 import {TableDOMCell, TableDOMTable} from './LexicalTableObserver';
-import {TableRowNode} from './LexicalTableRowNode';
-import {getTable} from './LexicalTableSelectionHelpers';
+import {$isTableRowNode, type TableRowNode} from './LexicalTableRowNode';
+import {
+  $getNearestTableCellInTableFromDOMNode,
+  getTable,
+} from './LexicalTableSelectionHelpers';
+import {$computeTableMapSkipCellCheck} from './LexicalTableUtils';
 
 export type SerializedTableNode = Spread<
   {
@@ -75,6 +83,30 @@ function setRowStriping(
   } else {
     removeClassNamesFromElement(dom, config.theme.tableRowStriping);
     dom.removeAttribute('data-lexical-row-striping');
+  }
+}
+
+const scrollableEditors = new WeakSet<LexicalEditor>();
+
+export function $isScrollableTablesActive(
+  editor: LexicalEditor = $getEditor(),
+): boolean {
+  return scrollableEditors.has(editor);
+}
+
+export function setScrollableTablesActive(
+  editor: LexicalEditor,
+  active: boolean,
+) {
+  if (active) {
+    if (__DEV__ && !editor._config.theme.tableScrollableWrapper) {
+      console.warn(
+        'TableNode: hasHorizontalScroll is active but theme.tableScrollableWrapper is not defined.',
+      );
+    }
+    scrollableEditors.add(editor);
+  } else {
+    scrollableEditors.delete(editor);
   }
 }
 
@@ -141,6 +173,27 @@ export class TableNode extends ElementNode {
     };
   }
 
+  extractWithChild(
+    child: LexicalNode,
+    selection: BaseSelection | null,
+    destination: 'clone' | 'html',
+  ): boolean {
+    return destination === 'html';
+  }
+
+  getDOMSlot(element: HTMLElement): ElementDOMSlot {
+    const tableElement =
+      (element.nodeName !== 'TABLE' && element.querySelector('table')) ||
+      element;
+    invariant(
+      tableElement.nodeName === 'TABLE',
+      'TableNode.getDOMSlot: createDOM() did not return a table',
+    );
+    return super
+      .getDOMSlot(tableElement)
+      .withAfter(tableElement.querySelector('colgroup'));
+  }
+
   createDOM(config: EditorConfig, editor?: LexicalEditor): HTMLElement {
     const tableElement = document.createElement('table');
     const colGroup = document.createElement('colgroup');
@@ -151,20 +204,28 @@ export class TableNode extends ElementNode {
       this.getColumnCount(),
       this.getColWidths(),
     );
+    setDOMUnmanaged(colGroup);
 
     addClassNamesToElement(tableElement, config.theme.table);
     if (this.__rowStriping) {
       setRowStriping(tableElement, config, true);
     }
+    if ($isScrollableTablesActive(editor)) {
+      const wrapperElement = document.createElement('div');
+      const classes = config.theme.tableScrollableWrapper;
+      if (classes) {
+        addClassNamesToElement(wrapperElement, classes);
+      } else {
+        wrapperElement.style.cssText = 'overflow-x: auto;';
+      }
+      wrapperElement.appendChild(tableElement);
+      return wrapperElement;
+    }
 
     return tableElement;
   }
 
-  updateDOM(
-    prevNode: TableNode,
-    dom: HTMLElement,
-    config: EditorConfig,
-  ): boolean {
+  updateDOM(prevNode: this, dom: HTMLElement, config: EditorConfig): boolean {
     if (prevNode.__rowStriping !== this.__rowStriping) {
       setRowStriping(dom, config, this.__rowStriping);
     }
@@ -173,25 +234,83 @@ export class TableNode extends ElementNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
+    const superExport = super.exportDOM(editor);
+    const {element} = superExport;
     return {
-      ...super.exportDOM(editor),
       after: (tableElement) => {
-        if (tableElement) {
-          const newElement = tableElement.cloneNode() as ParentNode;
-          const colGroup = document.createElement('colgroup');
-          const tBody = document.createElement('tbody');
-          if (isHTMLElement(tableElement)) {
-            const cols = tableElement.querySelectorAll('col');
-            colGroup.append(...cols);
-            const rows = tableElement.querySelectorAll('tr');
-            tBody.append(...rows);
-          }
-
-          newElement.replaceChildren(colGroup, tBody);
-
-          return newElement as HTMLElement;
+        if (superExport.after) {
+          tableElement = superExport.after(tableElement);
         }
+        if (isHTMLElement(tableElement) && tableElement.nodeName !== 'TABLE') {
+          tableElement = tableElement.querySelector('table');
+        }
+        if (!isHTMLElement(tableElement)) {
+          return null;
+        }
+
+        // Scan the table map to build a map of table cell key to the columns it needs
+        const [tableMap] = $computeTableMapSkipCellCheck(this, null, null);
+        const cellValues = new Map<
+          NodeKey,
+          {startColumn: number; colSpan: number}
+        >();
+        for (const mapRow of tableMap) {
+          for (const mapValue of mapRow) {
+            const key = mapValue.cell.getKey();
+            if (!cellValues.has(key)) {
+              cellValues.set(key, {
+                colSpan: mapValue.cell.getColSpan(),
+                startColumn: mapValue.startColumn,
+              });
+            }
+          }
+        }
+
+        // scan the DOM to find the table cell keys that were used and mark those columns
+        const knownColumns = new Set<number>();
+        for (const cellDOM of tableElement.querySelectorAll(
+          ':scope > tr > [data-temporary-table-cell-lexical-key]',
+        )) {
+          const key = cellDOM.getAttribute(
+            'data-temporary-table-cell-lexical-key',
+          );
+          if (key) {
+            const cellSpan = cellValues.get(key);
+            cellDOM.removeAttribute('data-temporary-table-cell-lexical-key');
+            if (cellSpan) {
+              cellValues.delete(key);
+              for (let i = 0; i < cellSpan.colSpan; i++) {
+                knownColumns.add(i + cellSpan.startColumn);
+              }
+            }
+          }
+        }
+
+        // Compute the colgroup and columns in the export
+        const colGroup = tableElement.querySelector(':scope > colgroup');
+        if (colGroup) {
+          // Only include the <col /> for rows that are in the output
+          const cols = Array.from(
+            tableElement.querySelectorAll(':scope > colgroup > col'),
+          ).filter((dom, i) => knownColumns.has(i));
+          colGroup.replaceChildren(...cols);
+        }
+
+        // Wrap direct descendant rows in a tbody for export
+        const rows = tableElement.querySelectorAll(':scope > tr');
+        if (rows.length > 0) {
+          const tBody = document.createElement('tbody');
+          for (const row of rows) {
+            tBody.appendChild(row);
+          }
+          tableElement.append(tBody);
+        }
+        return tableElement;
       },
+      element:
+        isHTMLElement(element) && element.nodeName !== 'TABLE'
+          ? element.querySelector('table')
+          : element,
     };
   }
 
@@ -216,17 +335,16 @@ export class TableNode extends ElementNode {
         continue;
       }
 
-      const x = row.findIndex((cell) => {
-        if (!cell) {
-          return;
+      for (let x = 0; x < row.length; x++) {
+        const cell = row[x];
+        if (cell == null) {
+          continue;
         }
         const {elem} = cell;
-        const cellNode = $getNearestNodeFromDOMNode(elem);
-        return cellNode === tableCellNode;
-      });
-
-      if (x !== -1) {
-        return {x, y};
+        const cellNode = $getNearestTableCellInTableFromDOMNode(this, elem);
+        if (cellNode !== null && tableCellNode.is(cellNode)) {
+          return {x, y};
+        }
       }
     }
 
@@ -343,12 +461,11 @@ export function $getElementForTableNode(
   tableNode: TableNode,
 ): TableDOMTable {
   const tableElement = editor.getElementByKey(tableNode.getKey());
-
-  if (tableElement == null) {
-    throw new Error('Table Element Not Found');
-  }
-
-  return getTable(tableElement);
+  invariant(
+    tableElement !== null,
+    '$getElementForTableNode: Table Element Not Found',
+  );
+  return getTable(tableNode, tableElement);
 }
 
 export function $convertTableElement(
@@ -358,7 +475,29 @@ export function $convertTableElement(
   if (domNode.hasAttribute('data-lexical-row-striping')) {
     tableNode.setRowStriping(true);
   }
-  return {node: tableNode};
+  const colGroup = domNode.querySelector(':scope > colgroup');
+  if (colGroup) {
+    let columns: number[] | undefined = [];
+    for (const col of colGroup.querySelectorAll(':scope > col')) {
+      let width = (col as HTMLElement).style.width || '';
+      if (!PIXEL_VALUE_REG_EXP.test(width)) {
+        // Also support deprecated width attribute for google docs
+        width = col.getAttribute('width') || '';
+        if (!/^\d+$/.test(width)) {
+          columns = undefined;
+          break;
+        }
+      }
+      columns.push(parseFloat(width));
+    }
+    if (columns) {
+      tableNode.setColWidths(columns);
+    }
+  }
+  return {
+    after: (children) => $descendantsMatching(children, $isTableRowNode),
+    node: tableNode,
+  };
 }
 
 export function $createTableNode(): TableNode {

@@ -132,11 +132,7 @@ export class ListNode extends ElementNode {
     return dom;
   }
 
-  updateDOM(
-    prevNode: ListNode,
-    dom: HTMLElement,
-    config: EditorConfig,
-  ): boolean {
+  updateDOM(prevNode: this, dom: HTMLElement, config: EditorConfig): boolean {
     if (prevNode.__tag !== this.__tag) {
       return true;
     }
@@ -176,8 +172,8 @@ export class ListNode extends ElementNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const {element} = super.exportDOM(editor);
-    if (element && isHTMLElement(element)) {
+    const element = this.createDOM(editor._config, editor);
+    if (isHTMLElement(element)) {
       if (this.__start !== 1) {
         element.setAttribute('start', String(this.__start));
       }
@@ -221,8 +217,12 @@ export class ListNode extends ElementNode {
         if ($isListNode(currentNode)) {
           listItemNode.append(currentNode);
         } else if ($isElementNode(currentNode)) {
-          const textNode = $createTextNode(currentNode.getTextContent());
-          listItemNode.append(textNode);
+          if (currentNode.isInline()) {
+            listItemNode.append(currentNode);
+          } else {
+            const textNode = $createTextNode(currentNode.getTextContent());
+            listItemNode.append(textNode);
+          }
         } else {
           listItemNode.append(currentNode);
         }
