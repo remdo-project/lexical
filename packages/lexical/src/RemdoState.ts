@@ -18,12 +18,12 @@ export class RemdoState {
     this._filter = filter;
   }
 
+  //TODO unify key/node, rethink undefined
   getFocus() {
     return this._focusKey ? $getNodeByKey(this._focusKey) : undefined;
   }
 
-  setFocus(node: LexicalNode | null) {
-    this._focusKey =
-      !node || node.getKey() === 'root' ? undefined : node.getKey();
+  setFocusKey(key: string) {
+    this._focusKey = key === 'root' ? undefined : key
   }
 }
