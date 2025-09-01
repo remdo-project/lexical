@@ -6,6 +6,7 @@
  *
  */
 
+/* eslint-disable lexical/no-optional-chaining */
 import type {ListNode, ListType} from './';
 import type {
   BaseSelection,
@@ -46,6 +47,8 @@ import {isNestedListNode} from './utils';
 
 export type SerializedListItemNode = Spread<
   {
+    id: string; //remdo customisation
+    folded: boolean | undefined; //remdo customisation
     checked: boolean | undefined;
     value: number;
   },
@@ -74,28 +77,107 @@ function applyMarkerStyles(
 
 /** @noInheritDoc */
 export class ListItemNode extends ElementNode {
+  //remdo customisation
+  __folded: boolean;
+
   /** @internal */
   __value: number;
   /** @internal */
   __checked?: boolean;
+  /** @internal */
+  __id: string;
 
   static getType(): string {
     return 'listitem';
   }
 
   static clone(node: ListItemNode): ListItemNode {
-    return new ListItemNode(node.__value, node.__checked, node.__key);
+    return new ListItemNode(
+      node.__value,
+      node.__checked,
+      node.__key,
+      node.__id,
+      node.__folded, //remdo customisation
+    );
   }
 
-  constructor(value?: number, checked?: boolean, key?: NodeKey) {
+  constructor(
+    value?: number,
+    checked?: boolean,
+    key?: NodeKey,
+    id?: string,
+    folded?: boolean,
+  ) {
     super(key);
+    this.__folded = !!folded;
     this.__value = value === undefined ? 1 : value;
     this.__checked = checked;
+    this.__id =
+      id ??
+      (globalThis.remdoGenerateNoteID && globalThis.remdoGenerateNoteID());
   }
 
-  createDOM(config: EditorConfig): HTMLElement {
+  //remdo customisation
+  getID(): string {
+    return this.__id;
+  }
+
+  //remdo customisation
+  getNonNestedTextContent(): string {
+    return this.getChildren()
+      .map((child) => {
+        if ($isListNode(child)) {
+          return '';
+        }
+        return child.getTextContent();
+      })
+      .join('');
+  }
+
+  //remdo customisation
+  getFolded() {
+    return !!this.getLatest().__folded;
+  }
+
+  //remdo customisation
+  setFolded(value: boolean | undefined): void {
+    this.getWritable().__folded = !!value;
+  }
+
+  //remdo customisation
+  //createDOM(config: EditorConfig): HTMLElement {
+  createDOM(config: EditorConfig, editor: LexicalEditor): HTMLElement {
     const element = document.createElement('li');
     this.updateListItemDOM(null, element, config);
+
+    //remdo customisation search filter
+    const filter = editor?._remdoState?.getFilter();
+    if (filter) {
+      if (!this.getNonNestedTextContent().includes(filter)) {
+        addClassNamesToElement(element, 'filtered');
+      } else {
+        addClassNamesToElement(element, 'unfiltered');
+      }
+    }
+
+    //remdo customisation folded
+    if (this.getFolded()) {
+      addClassNamesToElement(element, 'note-folded');
+    }
+
+    //remdo customisation focus
+    const focusNode = editor?._remdoState?.getFocus();
+    if (focusNode && !filter) {
+      if (
+        focusNode.getParent()?.getKey() === this.getKey() ||
+        focusNode.getKey() === this.getKey() ||
+        focusNode.isParentOf(this)
+      ) {
+        addClassNamesToElement(element, 'unfiltered');
+      } else {
+        addClassNamesToElement(element, 'filtered');
+      }
+    }
 
     return element;
   }
@@ -139,15 +221,18 @@ export class ListItemNode extends ElementNode {
   static transform(): (node: LexicalNode) => void {
     return (node: LexicalNode) => {
       invariant($isListItemNode(node), 'node is not a ListItemNode');
-      if (node.__checked == null) {
-        return;
-      }
-      const parent = node.getParent();
-      if ($isListNode(parent)) {
-        if (parent.getListType() !== 'check' && node.getChecked() != null) {
-          node.setChecked(undefined);
-        }
-      }
+      //
+      //remdo customisation
+      //
+      //if (node.__checked == null) {
+      //  return;
+      //}
+      //const parent = node.getParent();
+      //if ($isListNode(parent)) {
+      //  if (parent.getListType() !== 'check' && node.getChecked() != null) {
+      //    node.setChecked(undefined);
+      //  }
+      //}
     };
   }
 
@@ -161,7 +246,13 @@ export class ListItemNode extends ElementNode {
   }
 
   static importJSON(serializedNode: SerializedListItemNode): ListItemNode {
-    return $createListItemNode().updateFromJSON(serializedNode);
+    const node = $createListItemNode();
+    node.setFolded(serializedNode.folded); //remdo customisation
+    node.setChecked(serializedNode.checked);
+    node.setValue(serializedNode.value);
+    node.setFormat(serializedNode.format);
+    node.setDirection(serializedNode.direction);
+    return node;
   }
 
   updateFromJSON(
@@ -174,7 +265,7 @@ export class ListItemNode extends ElementNode {
   }
 
   exportDOM(editor: LexicalEditor): DOMExportOutput {
-    const element = this.createDOM(editor._config);
+    const element = this.createDOM(editor._config, editor);
 
     const formatType = this.getFormatType();
     if (formatType) {
@@ -185,7 +276,6 @@ export class ListItemNode extends ElementNode {
     if (direction) {
       element.dir = direction;
     }
-
     return {
       element,
     };
@@ -195,6 +285,8 @@ export class ListItemNode extends ElementNode {
     return {
       ...super.exportJSON(),
       checked: this.getChecked(),
+      folded: this.getFolded(), //remdo customisation
+      id: this.getID(), //remdo customisation
       value: this.getValue(),
     };
   }
@@ -372,14 +464,16 @@ export class ListItemNode extends ElementNode {
   getChecked(): boolean | undefined {
     const self = this.getLatest();
 
-    let listType: ListType | undefined;
-
-    const parent = this.getParent();
-    if ($isListNode(parent)) {
-      listType = parent.getListType();
-    }
-
-    return listType === 'check' ? Boolean(self.__checked) : undefined;
+    //remdo customisation
+    //let listType: ListType | undefined;
+    //
+    //const parent = this.getParent();
+    //if ($isListNode(parent)) {
+    //  listType = parent.getListType();
+    //}
+    //
+    //return listType === 'check' ? Boolean(self.__checked) : undefined;
+    return self.__checked;
   }
 
   setChecked(checked?: boolean): this {
@@ -490,24 +584,29 @@ function $setListItemThemeClassNames(
   }
 
   if (listTheme) {
-    const parentNode = node.getParent();
-    const isCheckList =
-      $isListNode(parentNode) && parentNode.getListType() === 'check';
+    //
+    //remdo customisation
+    //
+    //const parentNode = node.getParent();
+    //const isCheckList =
+    //  $isListNode(parentNode) && parentNode.getListType() === 'check';
     const checked = node.getChecked();
 
-    if (!isCheckList || checked) {
+    //if (!isCheckList || checked) {
+    if (checked) {
       classesToRemove.push(listTheme.listitemUnchecked);
     }
 
-    if (!isCheckList || !checked) {
+    //if (!isCheckList || !checked) {
+    if (!checked) {
       classesToRemove.push(listTheme.listitemChecked);
     }
 
-    if (isCheckList) {
-      classesToAdd.push(
-        checked ? listTheme.listitemChecked : listTheme.listitemUnchecked,
-      );
-    }
+    //if (isCheckList) {
+    classesToAdd.push(
+      checked ? listTheme.listitemChecked : listTheme.listitemUnchecked,
+    );
+    //}
   }
 
   if (nestedListItemClassName !== undefined) {

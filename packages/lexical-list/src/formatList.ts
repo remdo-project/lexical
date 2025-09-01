@@ -307,16 +307,17 @@ export function $removeList(): void {
  * @param list - The list whose children are updated.
  */
 export function updateChildrenListItemValue(list: ListNode): void {
-  const isNotChecklist = list.getListType() !== 'check';
+  //remdo customisation
+  //const isNotChecklist = list.getListType() !== 'check';
   let value = list.getStart();
   for (const child of list.getChildren()) {
     if ($isListItemNode(child)) {
       if (child.getValue() !== value) {
         child.setValue(value);
       }
-      if (isNotChecklist && child.getLatest().__checked != null) {
-        child.setChecked(undefined);
-      }
+      //if (isNotChecklist && child.getLatest().__checked != null) {
+      //  child.setChecked(undefined);
+      //}
       if (!$isListNode(child.getFirstChild())) {
         value++;
       }

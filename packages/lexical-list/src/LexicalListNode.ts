@@ -6,6 +6,7 @@
  *
  */
 
+/* eslint-disable lexical/no-optional-chaining */
 import {
   addClassNamesToElement,
   isHTMLElement,
@@ -15,6 +16,7 @@ import {
   $applyNodeReplacement,
   $createTextNode,
   $isElementNode,
+  $isRootOrShadowRoot,
   DOMConversionMap,
   DOMConversionOutput,
   DOMExportOutput,
@@ -104,10 +106,29 @@ export class ListNode extends ElementNode {
   }
 
   // View
-
   createDOM(config: EditorConfig, _editor?: LexicalEditor): HTMLElement {
     const tag = this.__tag;
     const dom = document.createElement(tag);
+    // remdo customization search filter
+    const filter = _editor?._remdoState?.getFilter();
+    if (
+      _editor?._remdoState.getFilter() &&
+      !$isRootOrShadowRoot(this.getParent())
+    ) {
+      addClassNamesToElement(dom, 'list-unstyled');
+    }
+    //remdo customisation focus
+    const focusNode = _editor?._remdoState?.getFocus();
+    if (focusNode && !filter) {
+      if (
+        focusNode.getParent()?.getKey() === this.getKey() ||
+        focusNode.isParentOf(this)
+      ) {
+        addClassNamesToElement(dom, 'unfiltered');
+      } else {
+        addClassNamesToElement(dom, 'filtered');
+      }
+    }
 
     if (this.__start !== 1) {
       dom.setAttribute('start', String(this.__start));

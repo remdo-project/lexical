@@ -44,13 +44,13 @@ import {
   getDOMSelection,
   markNodesWithTypesAsDirty,
 } from './LexicalUtils';
+import {RemdoState} from './RemdoState';
 import {ArtificialNode__DO_NOT_USE} from './nodes/ArtificialNode';
 import {$isDecoratorNode} from './nodes/LexicalDecoratorNode';
 import {LineBreakNode} from './nodes/LexicalLineBreakNode';
 import {ParagraphNode} from './nodes/LexicalParagraphNode';
 import {RootNode} from './nodes/LexicalRootNode';
 import {TabNode} from './nodes/LexicalTabNode';
-
 export type Spread<T1, T2> = Omit<T2, keyof T1> & T1;
 
 // https://github.com/microsoft/TypeScript/issues/3841
@@ -613,6 +613,9 @@ export class LexicalEditor {
   /** The version with build identifiers for this editor (since 0.17.1) */
   static version: string | undefined;
 
+  //remdo customizations
+  _remdoState: RemdoState;
+
   /** @internal */
   _headless: boolean;
   /** @internal */
@@ -686,6 +689,8 @@ export class LexicalEditor {
     createEditorArgs?: CreateEditorArgs,
   ) {
     this._createEditorArgs = createEditorArgs;
+    //remdo customizations
+    this._remdoState = new RemdoState();
     this._parentEditor = parentEditor;
     // The root element associated with this editor
     this._rootElement = null;
@@ -1388,4 +1393,5 @@ export class LexicalEditor {
   }
 }
 
-LexicalEditor.version = process.env.LEXICAL_VERSION;
+//remdo customization
+//LexicalEditor.version = process.env.LEXICAL_VERSION;
